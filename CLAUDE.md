@@ -5,9 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project context
 
 CRM web app for individual real estate agents in Taiwan (台灣房屋仲介個人業務員).
-The MVP is intentionally **front-end only with mock data** — Supabase, NextAuth, OpenAI,
-and LINE wiring are deferred until the data flow stabilizes. All UI strings are in
-Traditional Chinese; TypeScript is strict and `any` is forbidden by convention.
+**Auth is on Supabase (`@supabase/ssr`); data layer is still on zustand+mock-data.**
+OpenAI and LINE wiring are still deferred. All UI strings are Traditional Chinese;
+TypeScript is strict and `any` is forbidden by convention.
+
+> **Heads up:** the app cannot boot without `NEXT_PUBLIC_SUPABASE_URL` and
+> `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Middleware throws on missing envs by design.
+> Run `vercel link` (creates the Vercel project), install the Supabase Marketplace
+> integration in the Vercel dashboard, then `vercel env pull .env.local`.
 
 ## Commands
 
@@ -86,25 +91,80 @@ incomplete because they are typed as `Record<Status, string>`.
   `{ toast }` from `"sonner"` directly.
 - **Path alias `@/*`** is configured in `tsconfig.json` and points to the repo root.
 
-### Auth (deferred)
+### Auth — Supabase Auth via `@supabase/ssr`
 
-`/login` is currently a fake form that pushes to `/`. There is **no middleware**
-guarding routes. When NextAuth is added, put the route guard in `middleware.ts` at
-the repo root and protect everything except `(auth)/*` and `/api/auth/*`.
+The wiring lives in three layers:
+
+1. **`lib/supabase/{client,server,middleware}.ts`** — three creators, one per Next
+   runtime. Always import `createClient` from the matching file:
+   - `client.ts` → React client components (`"use client"`)
+   - `server.ts` → Server Components, Server Actions, Route Handlers
+   - `middleware.ts` → Edge middleware only (don't import elsewhere)
+
+   They share `lib/supabase/env.ts`, which throws a clear "run `vercel env pull`"
+   error if envs are missing. **Do not soften that throw** — it's the contract that
+   forces dev environments to be configured before booting.
+
+2. **Root `middleware.ts`** calls `updateSession`, which:
+   - refreshes the auth cookie on every request via `supabase.auth.getUser()`
+   - redirects unauthenticated requests to `/login?next=<path>`
+   - bounces authenticated users away from `/login` and `/signup`
+
+   The matcher excludes static assets and `/api/*` — API routes do their own
+   auth checks (none today, since stubs return mock data).
+
+3. **`app/(auth)/actions.ts`** — `signInAction`, `signUpAction`, `signOutAction`
+   are Server Actions used by `app/(auth)/login/page.tsx`,
+   `app/(auth)/signup/page.tsx`, and `components/layout/user-menu.tsx`.
+   Auth errors are translated to zh-TW via `translateAuthError`.
+
+The dashboard layout (`app/(dashboard)/layout.tsx`) is a Server Component that
+fetches `auth.getUser()` and passes `{ email, displayName }` down. Display name
+comes from `user_metadata.display_name` (set at signup) with email-prefix fallback.
+
+> **Mock-data placeholder:** `CURRENT_USER` in `lib/constants.ts` is still used
+> when forms create new properties / clients / interactions / reminders. The data
+> layer migration replaces these with the real `auth.uid()` from a Server Action.
+
+### Database — Supabase Postgres
+
+Schema lives in `supabase/migrations/`. The initial migration creates four tables
+(`properties`, `clients`, `interactions`, `reminders`) plus enums that mirror the
+TS unions in `lib/types.ts`. **Single-agent RLS** is enabled: each row is visible
+and mutable only by its owner (`owner_id` / `assigned_to` / `created_by`).
+
+To push schema to the Vercel-Marketplace Supabase project:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <ref-from-vercel-supabase-dashboard>
+npx supabase db push
+```
+
+When iterating on the schema locally:
+
+1. Edit the database directly via MCP `execute_sql` or `supabase db query`
+2. When happy, generate a migration: `npx supabase db pull <name> --local --yes`
+3. Commit the new file under `supabase/migrations/`
+
+There is **no `seed.sql` yet** — porting `lib/mock-data.ts` is part of the data
+layer migration in the next wave (it requires an `auth.users` row, so we do it
+via a TS seed script after the first user signs up).
 
 ## Environment variables
 
-`.env.example` lists the keys the app expects but does not yet read at runtime.
-Required when each integration is wired:
+`.env.example` lists the keys. After installing the Supabase Marketplace
+integration in Vercel, `vercel env pull .env.local` populates everything below.
 
-| Var | Owner |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase data layer |
-| `NEXTAUTH_URL`, `NEXTAUTH_SECRET` | NextAuth.js |
-| `OPENAI_API_KEY` | (planned) AI assist on client/property notes |
-| `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET` | (planned) LINE bot inbound |
+| Var | Owner | Required |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Auth + REST (browser-safe) | yes — app won't boot without them |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only admin operations | for migration scripts / cron |
+| `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING` | `supabase` CLI + raw psql | for schema work |
+| `OPENAI_API_KEY` | (planned) AI assist on notes | no |
+| `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET` | (planned) LINE bot | no |
 
-Copy to `.env.local` (gitignored) — do not commit `.env*.local`.
+Never commit `.env*.local` — already gitignored.
 
 ## When extending the app
 
@@ -112,8 +172,12 @@ Copy to `.env.local` (gitignored) — do not commit `.env*.local`.
   → store in `hooks/use-<entity>.ts` → form/card components in
   `components/<entity>/` → list+detail+new pages under `app/(dashboard)/<entity>/`
   → API stub under `app/api/<entity>/route.ts`.
-- **Replacing mock data with Supabase**: keep the store interface identical; replace
-  the seed with a `useEffect`-triggered fetch and (optionally) a realtime
-  subscription. Components read `useStore((s) => s.items)` and need no changes.
+- **Replacing mock data with Supabase** (next wave): keep the store interface
+  identical; replace the seed with a `useEffect`-triggered fetch via
+  `createClient()` from `lib/supabase/client.ts`, and optionally a
+  `supabase.channel(...).on("postgres_changes", ...)` subscription. Components
+  read `useStore((s) => s.items)` and need no changes. Mutation actions
+  (currently writing `CURRENT_USER.id`) should switch to Server Actions that
+  call `createClient()` from `lib/supabase/server.ts` so RLS sees `auth.uid()`.
 - **i18n**: app is zh-TW only; if adding English, route through `next-intl` with
   zh-TW as the default locale (do not hand-roll a translator).

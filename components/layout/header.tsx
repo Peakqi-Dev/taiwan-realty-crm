@@ -2,9 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
-import { CURRENT_USER } from "@/lib/constants";
 import { NAV_ITEMS } from "./nav-config";
 import { useReminders } from "@/hooks/use-reminders";
+import { UserMenu } from "./user-menu";
 
 function pageTitleFor(pathname: string): string {
   if (pathname === "/") return "Dashboard";
@@ -14,7 +14,11 @@ function pageTitleFor(pathname: string): string {
   return match?.label ?? "房仲業務 CRM";
 }
 
-export function Header() {
+interface HeaderProps {
+  user: { email: string; displayName: string };
+}
+
+export function Header({ user }: HeaderProps) {
   const pathname = usePathname();
   const reminders = useReminders();
   const pendingCount = reminders.filter((r) => !r.isDone).length;
@@ -43,17 +47,7 @@ export function Header() {
             )}
           </button>
 
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
-              {CURRENT_USER.name.slice(-2)}
-            </div>
-            <div className="hidden text-left sm:block">
-              <p className="text-sm font-medium leading-tight text-slate-900">
-                {CURRENT_USER.name}
-              </p>
-              <p className="text-[11px] leading-tight text-slate-500">業務員</p>
-            </div>
-          </div>
+          <UserMenu email={user.email} displayName={user.displayName} />
         </div>
       </div>
     </header>

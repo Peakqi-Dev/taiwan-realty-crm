@@ -2,27 +2,24 @@
 
 import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
-import { useSearchParams } from "next/navigation";
 import { Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { signInAction } from "../actions";
+import { signUpAction } from "../actions";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? "登入中..." : "登入"}
+      {pending ? "建立中..." : "建立帳號"}
     </Button>
   );
 }
 
-export default function LoginPage() {
-  const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/";
-  const [state, formAction] = useFormState(signInAction, {});
+export default function SignupPage() {
+  const [state, formAction] = useFormState(signUpAction, {});
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
@@ -32,12 +29,19 @@ export default function LoginPage() {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
               <Home className="h-6 w-6" />
             </div>
-            <h1 className="text-xl font-semibold text-slate-900">房仲業務 CRM</h1>
-            <p className="text-sm text-slate-500">登入以管理你的客戶與物件</p>
+            <h1 className="text-xl font-semibold text-slate-900">建立帳號</h1>
+            <p className="text-sm text-slate-500">註冊房仲業務 CRM</p>
           </div>
 
           <form action={formAction} className="space-y-4">
-            <input type="hidden" name="next" value={next} />
+            <div className="space-y-1.5">
+              <Label htmlFor="displayName">姓名</Label>
+              <Input
+                id="displayName"
+                name="displayName"
+                placeholder="例:陳俊豪"
+              />
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">電子郵件</Label>
               <Input
@@ -54,9 +58,11 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
+                minLength={6}
               />
+              <p className="text-xs text-slate-500">至少 6 個字元</p>
             </div>
 
             {state.error && (
@@ -69,9 +75,9 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-xs text-slate-500">
-            還沒有帳號?{" "}
-            <Link href="/signup" className="text-blue-600 hover:underline">
-              建立帳號
+            已有帳號?{" "}
+            <Link href="/login" className="text-blue-600 hover:underline">
+              登入
             </Link>
           </p>
         </CardContent>
