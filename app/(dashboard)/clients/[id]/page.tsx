@@ -20,6 +20,7 @@ import {
 import { ClientStatusBadge } from "@/components/clients/client-status-badge";
 import { ClientForm } from "@/components/clients/client-form";
 import { useClient, useClientStore } from "@/hooks/use-clients";
+import { deleteClientAction } from "@/app/(dashboard)/clients/actions";
 import { CURRENT_USER, INTERACTION_TYPES } from "@/lib/constants";
 import {
   formatBudgetRange,
@@ -35,15 +36,40 @@ export default function ClientDetailPage() {
   const client = useClient(params.id);
   const interactionsFor = useClientStore((s) => s.interactionsFor);
   const addInteraction = useClientStore((s) => s.addInteraction);
-  const remove = useClientStore((s) => s.remove);
+  const removeOne = useClientStore((s) => s.removeOne);
+  const initialized = useClientStore((s) => s.initialized);
 
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [interactionType, setInteractionType] = useState<InteractionType>("電話");
   const [note, setNote] = useState("");
 
-  if (!client) notFound();
+  if (!client) {
+    if (!initialized) {
+      return (
+        <div className="mx-auto max-w-4xl py-10 text-center text-sm text-slate-500">
+          載入中...
+        </div>
+      );
+    }
+    notFound();
+  }
 
   const interactions = interactionsFor(client.id);
+
+  const onDelete = async () => {
+    if (!confirm("確定要刪除此客戶?")) return;
+    setDeleting(true);
+    const result = await deleteClientAction(client.id);
+    if (result.error) {
+      toast.error(result.error);
+      setDeleting(false);
+      return;
+    }
+    removeOne(client.id);
+    toast.success("客戶已刪除");
+    router.push("/clients");
+  };
 
   const onAddInteraction = (e: FormEvent) => {
     e.preventDefault();
@@ -76,16 +102,11 @@ export default function ClientDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              if (confirm("確定要刪除此客戶?")) {
-                remove(client.id);
-                toast.success("客戶已刪除");
-                router.push("/clients");
-              }
-            }}
+            onClick={onDelete}
+            disabled={deleting}
           >
             <Trash2 className="mr-1 h-4 w-4 text-rose-600" />
-            刪除
+            {deleting ? "刪除中..." : "刪除"}
           </Button>
         </div>
       </div>

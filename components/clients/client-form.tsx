@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { useFormState, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,10 +17,14 @@ import {
 import {
   CLIENT_STATUSES,
   CLIENT_TYPES,
-  CURRENT_USER,
   TAIPEI_DISTRICTS,
 } from "@/lib/constants";
 import { useClientStore } from "@/hooks/use-clients";
+import {
+  createClientAction,
+  updateClientAction,
+  type ClientActionState,
+} from "@/app/(dashboard)/clients/actions";
 import type { Client, ClientStatus, ClientType } from "@/lib/types";
 
 interface ClientFormProps {
@@ -28,76 +32,64 @@ interface ClientFormProps {
   mode: "create" | "edit";
 }
 
+function SubmitButton({ mode }: { mode: ClientFormProps["mode"] }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "儲存中..." : mode === "create" ? "新增客戶" : "更新客戶"}
+    </Button>
+  );
+}
+
 export function ClientForm({ initial, mode }: ClientFormProps) {
   const router = useRouter();
-  const add = useClientStore((s) => s.add);
-  const update = useClientStore((s) => s.update);
-  const [submitting, setSubmitting] = useState(false);
+  const refresh = useClientStore((s) => s.refresh);
 
-  const [form, setForm] = useState({
-    name: initial?.name ?? "",
-    phone: initial?.phone ?? "",
-    lineId: initial?.lineId ?? "",
-    type: (initial?.type ?? "買方") as ClientType,
-    status: (initial?.status ?? "新客戶") as ClientStatus,
-    budgetMin: initial?.budgetMin?.toString() ?? "",
-    budgetMax: initial?.budgetMax?.toString() ?? "",
-    preferredDistricts: initial?.preferredDistricts ?? [],
-    requirements: initial?.requirements ?? "",
-  });
+  const action =
+    mode === "create"
+      ? createClientAction
+      : updateClientAction.bind(null, initial!.id);
 
-  const setField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const [state, formAction] = useFormState<ClientActionState, FormData>(
+    async (prev, formData) => {
+      const result = await action(prev, formData);
+      if (!result?.error) refresh();
+      return result ?? {};
+    },
+    {},
+  );
 
-  const toggleDistrict = (district: string) => {
-    setForm((prev) => ({
-      ...prev,
-      preferredDistricts: prev.preferredDistricts.includes(district)
-        ? prev.preferredDistricts.filter((d) => d !== district)
-        : [...prev.preferredDistricts, district],
-    }));
-  };
+  const [type, setType] = useState<ClientType>(initial?.type ?? "買方");
+  const [status, setStatus] = useState<ClientStatus>(
+    initial?.status ?? "新客戶",
+  );
+  const [preferredDistricts, setPreferredDistricts] = useState<string[]>(
+    initial?.preferredDistricts ?? [],
+  );
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    const payload = {
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      lineId: form.lineId.trim() || undefined,
-      type: form.type,
-      status: form.status,
-      budgetMin: form.budgetMin ? Number(form.budgetMin) : undefined,
-      budgetMax: form.budgetMax ? Number(form.budgetMax) : undefined,
-      preferredDistricts: form.preferredDistricts,
-      requirements: form.requirements.trim(),
-      assignedTo: initial?.assignedTo ?? CURRENT_USER.id,
-    };
-
-    if (mode === "create") {
-      const created = add(payload);
-      toast.success("客戶已新增");
-      router.push(`/clients/${created.id}`);
-    } else if (initial) {
-      update(initial.id, payload);
-      toast.success("客戶已更新");
-      router.push(`/clients/${initial.id}`);
-    }
-
-    setSubmitting(false);
-  };
+  const toggleDistrict = (district: string) =>
+    setPreferredDistricts((prev) =>
+      prev.includes(district)
+        ? prev.filter((d) => d !== district)
+        : [...prev, district],
+    );
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form action={formAction} className="space-y-6">
+      <input type="hidden" name="type" value={type} />
+      <input type="hidden" name="status" value={status} />
+      {preferredDistricts.map((d) => (
+        <input key={d} type="hidden" name="preferredDistricts" value={d} />
+      ))}
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="name">客戶姓名 *</Label>
           <Input
             id="name"
+            name="name"
             required
-            value={form.name}
-            onChange={(e) => setField("name", e.target.value)}
+            defaultValue={initial?.name ?? ""}
             placeholder="例：王俊傑"
           />
         </div>
@@ -106,9 +98,9 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
           <Label htmlFor="phone">電話 *</Label>
           <Input
             id="phone"
+            name="phone"
             required
-            value={form.phone}
-            onChange={(e) => setField("phone", e.target.value)}
+            defaultValue={initial?.phone ?? ""}
             placeholder="0912-345-678"
           />
         </div>
@@ -117,18 +109,15 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
           <Label htmlFor="lineId">LINE ID</Label>
           <Input
             id="lineId"
-            value={form.lineId}
-            onChange={(e) => setField("lineId", e.target.value)}
+            name="lineId"
+            defaultValue={initial?.lineId ?? ""}
             placeholder="選填"
           />
         </div>
 
         <div className="space-y-1.5">
           <Label>客戶類型 *</Label>
-          <Select
-            value={form.type}
-            onValueChange={(v) => setField("type", v as ClientType)}
-          >
+          <Select value={type} onValueChange={(v) => setType(v as ClientType)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -145,8 +134,8 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
         <div className="space-y-1.5">
           <Label>狀態 *</Label>
           <Select
-            value={form.status}
-            onValueChange={(v) => setField("status", v as ClientStatus)}
+            value={status}
+            onValueChange={(v) => setStatus(v as ClientStatus)}
           >
             <SelectTrigger>
               <SelectValue />
@@ -165,10 +154,10 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
           <Label htmlFor="budgetMin">預算下限(萬元)</Label>
           <Input
             id="budgetMin"
+            name="budgetMin"
             type="number"
             min={0}
-            value={form.budgetMin}
-            onChange={(e) => setField("budgetMin", e.target.value)}
+            defaultValue={initial?.budgetMin?.toString() ?? ""}
           />
         </div>
 
@@ -176,10 +165,10 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
           <Label htmlFor="budgetMax">預算上限(萬元)</Label>
           <Input
             id="budgetMax"
+            name="budgetMax"
             type="number"
             min={0}
-            value={form.budgetMax}
-            onChange={(e) => setField("budgetMax", e.target.value)}
+            defaultValue={initial?.budgetMax?.toString() ?? ""}
           />
         </div>
 
@@ -187,7 +176,7 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
           <Label>偏好行政區</Label>
           <div className="flex flex-wrap gap-2">
             {TAIPEI_DISTRICTS.map((d) => {
-              const active = form.preferredDistricts.includes(d);
+              const active = preferredDistricts.includes(d);
               return (
                 <button
                   type="button"
@@ -211,21 +200,25 @@ export function ClientForm({ initial, mode }: ClientFormProps) {
           <Label htmlFor="requirements">需求備註</Label>
           <Textarea
             id="requirements"
+            name="requirements"
             rows={4}
-            value={form.requirements}
-            onChange={(e) => setField("requirements", e.target.value)}
+            defaultValue={initial?.requirements ?? ""}
             placeholder="例：首購、雙北捷運站 5 分鐘內、2 房以上"
           />
         </div>
       </div>
 
+      {state.error && (
+        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {state.error}
+        </p>
+      )}
+
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.back()}>
           取消
         </Button>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "儲存中..." : mode === "create" ? "新增客戶" : "更新客戶"}
-        </Button>
+        <SubmitButton mode={mode} />
       </div>
     </form>
   );
