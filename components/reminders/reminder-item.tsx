@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useTransition } from "react";
 import { Bell, Calendar, Check, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useReminderStore } from "@/hooks/use-reminders";
 import { useClientStore } from "@/hooks/use-clients";
 import { usePropertyStore } from "@/hooks/use-properties";
+import {
+  toggleReminderDoneAction,
+  deleteReminderAction,
+} from "@/app/(dashboard)/reminders/actions";
 import { cn, daysFromNow, formatDate } from "@/lib/utils";
 import type { Reminder } from "@/lib/types";
 
@@ -21,11 +27,15 @@ const TYPE_ICON: Record<Reminder["type"], typeof Bell> = {
   自訂: Bell,
 };
 
-export function ReminderItem({ reminder, showActions = true }: ReminderItemProps) {
-  const toggleDone = useReminderStore((s) => s.toggleDone);
-  const remove = useReminderStore((s) => s.remove);
+export function ReminderItem({
+  reminder,
+  showActions = true,
+}: ReminderItemProps) {
+  const setOne = useReminderStore((s) => s.setOne);
+  const removeOne = useReminderStore((s) => s.removeOne);
   const findClient = useClientStore((s) => s.getById);
   const findProperty = usePropertyStore((s) => s.getById);
+  const [isPending, startTransition] = useTransition();
 
   const Icon = TYPE_ICON[reminder.type];
   const days = daysFromNow(reminder.remindAt);
@@ -35,9 +45,34 @@ export function ReminderItem({ reminder, showActions = true }: ReminderItemProps
   const linkedHref = (() => {
     if (!reminder.targetId) return null;
     if (findClient(reminder.targetId)) return `/clients/${reminder.targetId}`;
-    if (findProperty(reminder.targetId)) return `/properties/${reminder.targetId}`;
+    if (findProperty(reminder.targetId))
+      return `/properties/${reminder.targetId}`;
     return null;
   })();
+
+  const onToggle = () => {
+    startTransition(async () => {
+      const result = await toggleReminderDoneAction(reminder.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.reminder) setOne(result.reminder);
+    });
+  };
+
+  const onDelete = () => {
+    if (!confirm("確定要刪除此提醒?")) return;
+    startTransition(async () => {
+      const result = await deleteReminderAction(reminder.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      removeOne(reminder.id);
+      toast.success("提醒已刪除");
+    });
+  };
 
   return (
     <div
@@ -104,7 +139,8 @@ export function ReminderItem({ reminder, showActions = true }: ReminderItemProps
             variant="ghost"
             size="icon"
             aria-label={reminder.isDone ? "標記為未完成" : "標記為完成"}
-            onClick={() => toggleDone(reminder.id)}
+            onClick={onToggle}
+            disabled={isPending}
           >
             <Check className="h-4 w-4" />
           </Button>
@@ -113,7 +149,8 @@ export function ReminderItem({ reminder, showActions = true }: ReminderItemProps
             variant="ghost"
             size="icon"
             aria-label="刪除"
-            onClick={() => remove(reminder.id)}
+            onClick={onDelete}
+            disabled={isPending}
           >
             <Trash2 className="h-4 w-4 text-rose-600" />
           </Button>
