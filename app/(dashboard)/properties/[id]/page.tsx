@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { PropertyStatusBadge } from "@/components/properties/property-status-badge";
 import { PropertyForm } from "@/components/properties/property-form";
 import { useProperty, usePropertyStore } from "@/hooks/use-properties";
+import { deletePropertyAction } from "@/app/(dashboard)/properties/actions";
 import { formatDate, formatPriceWan, daysFromNow } from "@/lib/utils";
 import { useState } from "react";
 
@@ -17,12 +18,38 @@ export default function PropertyDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const property = useProperty(params.id);
-  const remove = usePropertyStore((s) => s.remove);
+  const removeOne = usePropertyStore((s) => s.removeOne);
+  const initialized = usePropertyStore((s) => s.initialized);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  if (!property) notFound();
+  // Wait for the store to load before deciding the property is missing.
+  if (!property) {
+    if (!initialized) {
+      return (
+        <div className="mx-auto max-w-4xl py-10 text-center text-sm text-slate-500">
+          載入中...
+        </div>
+      );
+    }
+    notFound();
+  }
 
   const days = daysFromNow(property.commissionDeadline);
+
+  const onDelete = async () => {
+    if (!confirm("確定要刪除此物件?")) return;
+    setDeleting(true);
+    const result = await deletePropertyAction(property.id);
+    if (result.error) {
+      toast.error(result.error);
+      setDeleting(false);
+      return;
+    }
+    removeOne(property.id);
+    toast.success("物件已刪除");
+    router.push("/properties");
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -39,16 +66,11 @@ export default function PropertyDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              if (confirm("確定要刪除此物件?")) {
-                remove(property.id);
-                toast.success("物件已刪除");
-                router.push("/properties");
-              }
-            }}
+            onClick={onDelete}
+            disabled={deleting}
           >
             <Trash2 className="mr-1 h-4 w-4 text-rose-600" />
-            刪除
+            {deleting ? "刪除中..." : "刪除"}
           </Button>
         </div>
       </div>
