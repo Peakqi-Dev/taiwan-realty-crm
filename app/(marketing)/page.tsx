@@ -204,7 +204,7 @@ function Pain() {
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
         <SectionTag>痛點</SectionTag>
         <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-4xl">
-          房仲每天面對的 5 個痛
+          房仲每天面對的 5 個難題
         </h2>
         <p className="mt-3 max-w-2xl text-slate-400">
           做房仲不缺努力，缺的是一套能幫你把所有資訊收整起來的系統。

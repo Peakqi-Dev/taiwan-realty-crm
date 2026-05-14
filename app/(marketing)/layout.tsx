@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "LeadFlow — 專為房仲打造的 AI 業務作業系統",
@@ -26,8 +27,8 @@ function Nav() {
     <header className="sticky top-0 z-50 border-b border-slate-900/80 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2 group">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-purple-500 text-xs font-bold text-white shadow-lg shadow-blue-500/20">
-            L
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg shadow-blue-500/20">
+            <Sparkles className="h-3.5 w-3.5 text-white" />
           </span>
           <span className="text-sm font-semibold tracking-tight">LeadFlow</span>
         </Link>
@@ -61,8 +62,8 @@ function Footer() {
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="flex flex-col items-start justify-between gap-6 text-sm text-slate-400 md:flex-row md:items-center">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-purple-500 text-xs font-bold text-white">
-              L
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-purple-500">
+              <Sparkles className="h-3 w-3 text-white" />
             </span>
             <span className="font-semibold text-slate-200">LeadFlow</span>
             <span className="text-slate-600">·</span>
