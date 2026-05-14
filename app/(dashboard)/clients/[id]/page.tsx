@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState } from "react";
+import { useFormState, useFormStatus } from "react-dom";
 import { ArrowLeft, MessageCircle, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,8 +21,16 @@ import {
 import { ClientStatusBadge } from "@/components/clients/client-status-badge";
 import { ClientForm } from "@/components/clients/client-form";
 import { useClient, useClientStore } from "@/hooks/use-clients";
+import {
+  useInteractions,
+  useInteractionStore,
+} from "@/hooks/use-interactions";
 import { deleteClientAction } from "@/app/(dashboard)/clients/actions";
-import { CURRENT_USER, INTERACTION_TYPES } from "@/lib/constants";
+import {
+  createInteractionAction,
+  type InteractionActionState,
+} from "@/app/(dashboard)/interactions/actions";
+import { INTERACTION_TYPES } from "@/lib/constants";
 import {
   formatBudgetRange,
   formatDate,
@@ -30,19 +39,60 @@ import {
 } from "@/lib/utils";
 import type { InteractionType } from "@/lib/types";
 
+function AddInteractionButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" size="sm" disabled={pending}>
+      <Plus className="mr-1 h-4 w-4" />
+      {pending ? "新增中..." : "新增紀錄"}
+    </Button>
+  );
+}
+
 export default function ClientDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const client = useClient(params.id);
-  const interactionsFor = useClientStore((s) => s.interactionsFor);
-  const addInteraction = useClientStore((s) => s.addInteraction);
-  const removeOne = useClientStore((s) => s.removeOne);
+  const removeClient = useClientStore((s) => s.removeOne);
+  const bumpLastContact = useClientStore((s) => s.bumpLastContact);
   const initialized = useClientStore((s) => s.initialized);
+
+  // Bootstrap interactions store (returns [], we filter ourselves below).
+  useInteractions();
+  const interactionsFor = useInteractionStore((s) => s.interactionsFor);
+  const setInteraction = useInteractionStore((s) => s.setOne);
 
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [interactionType, setInteractionType] = useState<InteractionType>("電話");
-  const [note, setNote] = useState("");
+  const [interactionType, setInteractionType] =
+    useState<InteractionType>("電話");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const interactionAction = client
+    ? createInteractionAction.bind(null, client.id)
+    : null;
+
+  const [interactionState, interactionFormAction] = useFormState<
+    InteractionActionState,
+    FormData
+  >(
+    async (prev, formData) => {
+      if (!interactionAction || !client) return {};
+      const result = await interactionAction(prev, formData);
+      if (result.error) {
+        toast.error(result.error);
+        return { error: result.error };
+      }
+      if (result.interaction) {
+        setInteraction(result.interaction);
+        bumpLastContact(client.id, result.interaction.createdAt);
+        formRef.current?.reset();
+        toast.success("互動紀錄已新增");
+      }
+      return {};
+    },
+    {},
+  );
 
   if (!client) {
     if (!initialized) {
@@ -66,25 +116,9 @@ export default function ClientDetailPage() {
       setDeleting(false);
       return;
     }
-    removeOne(client.id);
+    removeClient(client.id);
     toast.success("客戶已刪除");
     router.push("/clients");
-  };
-
-  const onAddInteraction = (e: FormEvent) => {
-    e.preventDefault();
-    if (!note.trim()) {
-      toast.error("請輸入互動內容");
-      return;
-    }
-    addInteraction({
-      clientId: client.id,
-      type: interactionType,
-      note: note.trim(),
-      createdBy: CURRENT_USER.id,
-    });
-    setNote("");
-    toast.success("互動紀錄已新增");
   };
 
   return (
@@ -191,7 +225,12 @@ export default function ClientDetailPage() {
           <Card>
             <CardContent className="p-6">
               <h2 className="mb-3 font-semibold text-slate-900">新增互動紀錄</h2>
-              <form onSubmit={onAddInteraction} className="space-y-3">
+              <form
+                ref={formRef}
+                action={interactionFormAction}
+                className="space-y-3"
+              >
+                <input type="hidden" name="type" value={interactionType} />
                 <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
                   <div className="space-y-1.5">
                     <Label>類型</Label>
@@ -217,18 +256,19 @@ export default function ClientDetailPage() {
                     <Label htmlFor="note">內容</Label>
                     <Textarea
                       id="note"
+                      name="note"
                       rows={3}
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
                       placeholder="記錄這次的對話、看屋反饋或下一步動作..."
                     />
                   </div>
                 </div>
+                {interactionState.error && (
+                  <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {interactionState.error}
+                  </p>
+                )}
                 <div className="flex justify-end">
-                  <Button type="submit" size="sm">
-                    <Plus className="mr-1 h-4 w-4" />
-                    新增紀錄
-                  </Button>
+                  <AddInteractionButton />
                 </div>
               </form>
             </CardContent>

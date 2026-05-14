@@ -16,7 +16,7 @@ import { ClientStatusBadge } from "@/components/clients/client-status-badge";
 import { useProperties } from "@/hooks/use-properties";
 import { useClients } from "@/hooks/use-clients";
 import { useReminders } from "@/hooks/use-reminders";
-import { useClientStore } from "@/hooks/use-clients";
+import { useInteractions } from "@/hooks/use-interactions";
 import { daysFromNow, formatRelative } from "@/lib/utils";
 
 interface StatCardProps {
@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const properties = useProperties();
   const clients = useClients();
   const reminders = useReminders();
-  const interactions = useClientStore((s) => s.interactions);
+  const interactions = useInteractions();
 
   const stats = useMemo(() => {
     const showingsThisMonth = interactions.filter(

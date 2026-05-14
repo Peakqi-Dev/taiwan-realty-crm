@@ -2,13 +2,7 @@
 
 import { useEffect } from "react";
 import { create } from "zustand";
-import type {
-  Client,
-  ClientStatus,
-  ClientType,
-  Interaction,
-} from "@/lib/types";
-import { mockInteractions } from "@/lib/mock-data";
+import type { Client, ClientStatus, ClientType } from "@/lib/types";
 import { createClient as createSupabase } from "@/lib/supabase/client";
 
 interface ClientRow {
@@ -47,8 +41,6 @@ export function rowToClient(r: ClientRow): Client {
 
 interface ClientState {
   clients: Client[];
-  // Interactions stay on mock data until the interactions wave migrates them.
-  interactions: Interaction[];
   isLoading: boolean;
   initialized: boolean;
   loadAll: () => Promise<void>;
@@ -56,15 +48,11 @@ interface ClientState {
   setOne: (client: Client) => void;
   removeOne: (id: string) => void;
   getById: (id: string) => Client | undefined;
-  interactionsFor: (clientId: string) => Interaction[];
-  addInteraction: (
-    interaction: Omit<Interaction, "id" | "createdAt">,
-  ) => Interaction;
+  bumpLastContact: (clientId: string, at: Date) => void;
 }
 
 export const useClientStore = create<ClientState>((set, get) => ({
   clients: [],
-  interactions: mockInteractions,
   isLoading: false,
   initialized: false,
   loadAll: async () => {
@@ -101,26 +89,12 @@ export const useClientStore = create<ClientState>((set, get) => ({
   removeOne: (id) =>
     set((s) => ({ clients: s.clients.filter((c) => c.id !== id) })),
   getById: (id) => get().clients.find((c) => c.id === id),
-  interactionsFor: (clientId) =>
-    get()
-      .interactions.filter((i) => i.clientId === clientId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-  addInteraction: (input) => {
-    const interaction: Interaction = {
-      ...input,
-      id: `i-${Date.now()}`,
-      createdAt: new Date(),
-    };
+  bumpLastContact: (clientId, at) =>
     set((s) => ({
-      interactions: [interaction, ...s.interactions],
       clients: s.clients.map((c) =>
-        c.id === input.clientId
-          ? { ...c, lastContactAt: interaction.createdAt }
-          : c,
+        c.id === clientId ? { ...c, lastContactAt: at } : c,
       ),
-    }));
-    return interaction;
-  },
+    })),
 }));
 
 export function useClients() {
