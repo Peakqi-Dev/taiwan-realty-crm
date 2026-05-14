@@ -6,7 +6,12 @@ import { supabasePublicEnv } from "./env";
 const AUTH_ONLY_PATHS = ["/login", "/signup"];
 
 // Routes anyone can visit, signed in or not.
-const PUBLIC_PATHS = ["/", "/auth/callback", ...AUTH_ONLY_PATHS];
+const PUBLIC_PATHS = [
+  "/",
+  "/auth/callback",
+  "/line/connect", // LIFF binding page — handles its own auth flow
+  ...AUTH_ONLY_PATHS,
+];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

@@ -14,6 +14,6 @@ export const config = {
      * - favicon, fonts, image asset extensions
      * - API routes (handled separately by their own auth checks)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|jpg|jpeg|gif|webp|woff2?|ico)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|jpg|jpeg|gif|webp|woff2?|ico)$).*)",
   ],
 };

@@ -3,9 +3,9 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "LeadFlow — 專為房仲打造的 AI 業務作業系統",
+  title: "LeadFlow — 你的 AI 房仲業務助手",
   description:
-    "結合 CRM、AI 工作流、客戶管理、提醒系統與 LINE 對話管理的房仲業務工具。不再漏掉任何一位客戶。",
+    "LeadFlow 是你的 AI 業務助手，幫你記住每位客戶、追進度、提醒跟進。你只要專心帶看和成交。",
 };
 
 export default function MarketingLayout({
@@ -67,7 +67,7 @@ function Footer() {
             </span>
             <span className="font-semibold text-slate-200">LeadFlow</span>
             <span className="text-slate-600">·</span>
-            <span>專為房仲打造的 AI 業務作業系統</span>
+            <span>你的 AI 房仲業務助手</span>
           </div>
           <div className="flex items-center gap-5">
             <Link href="/login" className="hover:text-slate-200">登入</Link>

@@ -46,14 +46,14 @@ function Hero() {
               Beta 開放申請中
             </div>
             <h1 className="mt-6 text-balance text-5xl font-bold leading-[1.05] tracking-tight md:text-6xl">
-              不再漏掉
+              你的
               <br />
               <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                任何一位客戶
+                AI 業務助手
               </span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-400">
-              專為房仲打造的 AI 業務作業系統。自動整理客戶、追蹤互動、提醒跟進，讓你把時間留給成交。
+              LeadFlow 幫你記住每位客戶、追進度、提醒跟進。你只要專心帶看和成交，剩下的交給 AI。
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
@@ -207,7 +207,7 @@ function Pain() {
           房仲每天面對的 5 個難題
         </h2>
         <p className="mt-3 max-w-2xl text-slate-400">
-          做房仲不缺努力，缺的是一套能幫你把所有資訊收整起來的系統。
+          做房仲不缺努力，缺的是一個能幫你把所有資訊整理起來的助手。
         </p>
 
         <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -233,34 +233,34 @@ function Pain() {
 function Features() {
   const features = [
     {
+      icon: MessageSquare,
+      title: "一句話建檔",
+      body: "在 LINE 跟助手講一句「王先生 3000 萬 信義區三房」，AI 自動建檔，不用填表單。",
+    },
+    {
       icon: Brain,
-      title: "AI 客戶摘要",
-      body: "把 LINE 對話 一鍵生成客戶摘要：預算、需求、聯絡狀態，全部結構化。",
+      title: "AI 幫你記客戶",
+      body: "把對話丟給助手，預算、需求、聯絡狀態全部結構化記住，下次帶看不用翻紀錄。",
     },
     {
       icon: ClipboardList,
-      title: "AI 需求分析",
-      body: "自動萃取客戶想要的房型、區域、預算範圍，比客戶自己講得還清楚。",
+      title: "AI 看懂客戶要什麼",
+      body: "從聊天內容萃取真正的需求 — 房型、區域、預算，比客戶自己講得還清楚。",
     },
     {
-      icon: Users,
-      title: "客戶管理",
-      body: "新客戶、追蹤中、議價、成交一目了然，每一階段都有對應行動建議。",
+      icon: Bell,
+      title: "助手主動提醒",
+      body: "委託快到期、客戶該回訪、今天有帶看，助手早上主動告訴你今天要忙什麼。",
     },
     {
       icon: TimerReset,
-      title: "到期提醒",
-      body: "委託到期日、追蹤週期、帶看行程，系統主動提醒你下一步該做什麼。",
-    },
-    {
-      icon: MessageSquare,
-      title: "互動紀錄",
-      body: "每通電話、每次帶看、每次 LINE 對話自動歸檔，永遠記得上次聊到哪。",
+      title: "永遠記得上次聊到哪",
+      body: "每通電話、每次帶看、每次 LINE 對話自動歸檔，重新聯絡時直接接續上次話題。",
     },
     {
       icon: LayoutDashboard,
-      title: "Dashboard",
-      body: "本月帶看次數、成交漏斗、即將到期委託，所有指標一個畫面看完。",
+      title: "全貌一眼看完",
+      body: "本月帶看、成交漏斗、即將到期委託，所有指標一個畫面看完。",
     },
     {
       icon: Sparkles,
@@ -272,12 +272,12 @@ function Features() {
   return (
     <section id="features" className="border-t border-slate-900/80">
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
-        <SectionTag>核心功能</SectionTag>
+        <SectionTag>AI 助手會做什麼</SectionTag>
         <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-4xl">
-          一套系統，七個關鍵能力
+          一個助手，七件事幫你搞定
         </h2>
         <p className="mt-3 max-w-2xl text-slate-400">
-          從訊息抓取、客戶建檔、提醒跟進到行動建議，AI 串起整條業務流程。
+          從客戶建檔、追蹤跟進到行動建議，全部用講的、不用點。
         </p>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -308,40 +308,40 @@ function Workflow() {
   const steps = [
     {
       tag: "1",
-      title: "LINE 對話",
-      body: "把客戶的 LINE 訊息送進系統。",
+      title: "對助手講一句",
+      body: "「王先生 3000 萬信義區三房」直接 LINE 給助手。",
     },
     {
       tag: "2",
-      title: "AI 分析",
-      body: "自動萃取預算、區域、需求關鍵字。",
+      title: "AI 看懂並建檔",
+      body: "助手自動萃取預算、區域、需求並結構化存進你的客戶清單。",
     },
     {
       tag: "3",
-      title: "客戶建檔",
-      body: "結構化客戶資料，一鍵建檔。",
+      title: "你跟客戶聊",
+      body: "你照常帶看、聊天、報案，助手在背景把進度記住。",
     },
     {
       tag: "4",
-      title: "提醒跟進",
-      body: "系統主動排程下次該聯絡。",
+      title: "助手提醒跟進",
+      body: "每天早上推一句：今天該回誰、誰快到期、有什麼帶看。",
     },
     {
       tag: "5",
-      title: "成交管理",
-      body: "從帶看到簽約全程可追蹤。",
+      title: "成交",
+      body: "你不用再為了想起客戶細節而花半小時翻群組。",
     },
   ];
 
   return (
     <section id="workflow" className="border-t border-slate-900/80">
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
-        <SectionTag>工作流</SectionTag>
+        <SectionTag>助手如何運作</SectionTag>
         <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-4xl">
-          5 步驟，把雜訊變成業績
+          像跟資深助理講話一樣
         </h2>
         <p className="mt-3 max-w-2xl text-slate-400">
-          不用學新工具，從你已經在用的 LINE 開始，AI 自動往下接。
+          不用學新工具，從你已經在用的 LINE 開始，助手自己接著做。
         </p>
 
         <div className="relative mt-12">
@@ -378,10 +378,10 @@ function Showcase() {
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
         <SectionTag>實際畫面</SectionTag>
         <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-4xl">
-          所有客戶 · 物件 · 提醒，一個畫面看完
+          想看細節？助手也整理好一張清單給你
         </h2>
         <p className="mt-3 max-w-2xl text-slate-400">
-          手機跟電腦都能用，帶看路上也能查資料、改狀態、加紀錄。
+          LINE 講話 + 網頁查詳細，手機電腦都能用，帶看路上也能改狀態、加紀錄。
         </p>
 
         <div className="relative mt-10">
@@ -504,30 +504,30 @@ function Results() {
   const items = [
     {
       icon: CheckCircle2,
-      title: "不再漏掉客戶",
-      body: "所有 LINE 對話、來電、帶看紀錄全部歸檔，沒有客戶會被遺忘。",
+      title: "沒有客戶會被忘掉",
+      body: "助手把所有 LINE 對話、來電、帶看紀錄都記住，你不用再煩惱誰漏掉。",
     },
     {
       icon: TimerReset,
-      title: "更快跟進",
-      body: "今天該聯絡誰、上次聊到哪、客戶要什麼，打開系統一秒就知道。",
+      title: "跟進變快",
+      body: "今天該聯絡誰、上次聊到哪、客戶要什麼，問助手一秒就知道。",
     },
     {
       icon: Users,
-      title: "客戶資訊集中",
-      body: "預算、區域、需求、互動歷史，每位客戶都有完整檔案。",
+      title: "客戶資料集中在一個地方",
+      body: "預算、區域、需求、互動歷史 — 每位客戶都有完整檔案，不用憑記憶。",
     },
     {
       icon: LineChart,
-      title: "提升成交效率",
-      body: "把時間花在會成交的客戶上，不再為了想起『誰要什麼』而花半小時翻群組。",
+      title: "把時間留給成交",
+      body: "整理客戶資料的時間，助手幫你省下來，你只要帶看和成交。",
     },
   ];
 
   return (
     <section className="border-t border-slate-900/80">
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
-        <SectionTag>使用成果</SectionTag>
+        <SectionTag>用戶實際感受</SectionTag>
         <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-4xl">
           省下整理的時間，把它變成業績
         </h2>
@@ -560,8 +560,8 @@ function Results() {
 function Faq() {
   const items = [
     {
-      q: "支援 LINE 嗎?",
-      a: "支援。把客戶 LINE 訊息送進 LeadFlow，AI 會自動萃取需求並建檔，並把每次互動歸到對應客戶下。",
+      q: "怎麼用 LINE 跟助手講話?",
+      a: "加 LeadFlow 官方帳號為好友，把客戶資訊直接 LINE 給助手（例如「王先生 3000 萬信義區三房」），AI 自動萃取需求建檔，每次互動也會歸到對應客戶下。",
     },
     {
       q: "可以多人使用嗎?",
@@ -569,11 +569,11 @@ function Faq() {
     },
     {
       q: "適合個人房仲嗎?",
-      a: "非常適合。LeadFlow 第一個就是為一人作戰的房仲設計，幫你把零碎的資訊整理成行動清單。",
+      a: "非常適合。LeadFlow 第一個就是為一人作戰的房仲設計，把零碎的資訊整理成每天的行動清單。",
     },
     {
       q: "需要安裝嗎?",
-      a: "不用。完全 Web App，手機跟電腦瀏覽器打開就能用，帶看路上也能即時更新狀態。",
+      a: "不用。LINE 跟瀏覽器都能用，沒有 App 要載。可以「加到主畫面」當原生 App 用。",
     },
   ];
 
@@ -620,12 +620,12 @@ function FinalCTA() {
       <div className="mx-auto max-w-4xl px-6 py-24 text-center md:py-32">
         <Bell className="mx-auto h-10 w-10 text-blue-300" />
         <h2 className="mt-6 text-balance text-4xl font-bold tracking-tight md:text-5xl">
-          讓 AI 幫你管理客戶，
+          把記客戶交給 AI，
           <br className="hidden md:block" />
-          把時間留給成交。
+          專心帶看和成交。
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-slate-400">
-          現在申請，第一批 Beta 用戶享受免費試用 + 直接跟產品團隊回饋需求。
+          現在申請，第一批 Beta 用戶免費試用 + 直接跟產品團隊回饋需求。
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
