@@ -8,7 +8,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/app", label: "Dashboard", icon: LayoutDashboard },
   { href: "/properties", label: "物件管理", icon: Building2 },
   { href: "/clients", label: "客戶管理", icon: Users },
   { href: "/reminders", label: "提醒事項", icon: Bell },

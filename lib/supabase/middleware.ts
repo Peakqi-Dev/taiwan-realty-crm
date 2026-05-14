@@ -2,10 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { supabasePublicEnv } from "./env";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback"];
+// Routes the user must be signed OUT to visit (we bounce signed-in users away).
+const AUTH_ONLY_PATHS = ["/login", "/signup"];
+
+// Routes anyone can visit, signed in or not.
+const PUBLIC_PATHS = ["/", "/auth/callback", ...AUTH_ONLY_PATHS];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isAuthOnly(pathname: string) {
+  return AUTH_ONLY_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
 }
 
 /**
@@ -45,9 +55,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirect);
   }
 
-  if (user && isPublic(request.nextUrl.pathname)) {
+  if (user && isAuthOnly(request.nextUrl.pathname)) {
     const redirect = request.nextUrl.clone();
-    redirect.pathname = "/";
+    redirect.pathname = "/app";
     redirect.searchParams.delete("next");
     return NextResponse.redirect(redirect);
   }

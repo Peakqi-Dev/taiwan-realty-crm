@@ -14,7 +14,7 @@ export async function signInAction(
 ): Promise<ActionState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/") || "/";
+  const next = String(formData.get("next") ?? "/app") || "/app";
 
   if (!email || !password) {
     return { error: "請輸入電子郵件與密碼" };
@@ -27,7 +27,7 @@ export async function signInAction(
   }
 
   revalidatePath("/", "layout");
-  redirect(next.startsWith("/") ? next : "/");
+  redirect(next.startsWith("/") ? next : "/app");
 }
 
 export async function signUpAction(
@@ -60,7 +60,7 @@ export async function signUpAction(
   revalidatePath("/", "layout");
   // 若 Supabase 設定為「需 email 確認」,使用者會被導去 /login + 提示。
   // 預設 Vercel-Supabase 整合會關閉確認,可直接登入。
-  redirect("/");
+  redirect("/app");
 }
 
 export async function signOutAction() {
