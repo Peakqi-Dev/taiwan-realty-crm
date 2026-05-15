@@ -91,7 +91,7 @@ export default function RemindersPage() {
           <form
             ref={formRef}
             action={formAction}
-            className="grid gap-3 md:grid-cols-[160px_1fr_180px_auto]"
+            className="grid grid-cols-1 gap-3 md:grid-cols-[160px_1fr_180px_auto]"
           >
             <input type="hidden" name="type" value={type} />
             <div className="space-y-1.5">
