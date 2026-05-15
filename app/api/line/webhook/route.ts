@@ -237,6 +237,23 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
   const pending = await getActiveDraft(lineUserId);
   const intent = classifyIntent(text);
 
+  // Fast path: "today" queries skip AI to stay under LINE's 10s webhook
+  // budget. Doesn't disturb a pending draft.
+  if (intent.kind === "today_tasks") {
+    try {
+      const brief = await buildDailyBrief(ownerUserId);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(brief.text),
+      ]);
+    } catch (err) {
+      console.error("[LINE webhook] daily brief failed:", err);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(BUSY_MESSAGE),
+      ]);
+    }
+    return;
+  }
+
   // Fast paths on the pending-draft branch.
   if (pending) {
     if (intent.kind === "confirm") {
