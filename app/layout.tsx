@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { PwaRegister } from "@/components/pwa-register";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -16,7 +17,18 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "LeadFlow AI 業務助手",
-  description: "專為台灣房屋仲介個人業務員設計的客戶與物件管理工具",
+  description: "你的 AI 房仲業務助手。一句話建檔、提醒跟進、把時間留給成交。",
+  appleWebApp: {
+    capable: true,
+    title: "LeadFlow",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -31,6 +43,7 @@ export default function RootLayout({
       >
         {children}
         <Toaster richColors position="top-right" />
+        <PwaRegister />
       </body>
     </html>
   );
