@@ -20,6 +20,7 @@ import {
 } from "@/lib/line/pending";
 import { classifyIntent } from "@/lib/line/intent";
 import { commitClientDraft } from "@/lib/line/commit-client";
+import { buildDailyBrief } from "@/lib/line/daily-brief";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -174,6 +175,31 @@ async function onMessage(
   }
 
   const ownerUserId = binding.user_id as string;
+
+  // Rich-menu shortcuts — handle BEFORE the AI flow so they don't get parsed.
+  if (text === "新增客戶") {
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage(
+        '直接傳客戶資訊給我，例如：\n「王先生 3000 萬 信義區 三房」\n或加上電話：\n「林小姐 0912-345-678 大安區或中山區 兩房 預算 2500-3000 萬」',
+      ),
+    ]);
+    return;
+  }
+  if (text === "今日任務") {
+    try {
+      const brief = await buildDailyBrief(ownerUserId);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(brief.text),
+      ]);
+    } catch (err) {
+      console.error("[LINE webhook] daily brief failed:", err);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage("拿不到今天的任務，請稍後再試。"),
+      ]);
+    }
+    return;
+  }
+
   const pending = await getActiveDraft(lineUserId);
   const intent = classifyIntent(text);
 
