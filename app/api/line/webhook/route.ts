@@ -352,12 +352,18 @@ async function runWithAck(
   }
 }
 
+// LINE webhook budget is 10s. Cap input so AI latency stays bounded — the
+// extractor only needs a few hundred chars to fill the schema; anything
+// beyond is usually filler text the model still has to read.
+const AI_INPUT_MAX = 400;
+
 async function computeIntentMessages(
   text: string,
   lineUserId: string,
   ownerUserId: string,
 ): Promise<LineMessage[]> {
-  const result = await classifyIntentAndExtract(text);
+  const trimmed = text.length > AI_INPUT_MAX ? text.slice(0, AI_INPUT_MAX) : text;
+  const result = await classifyIntentAndExtract(trimmed);
   if (!result) return [unknownReply()];
 
   if (result.intent === "client") {
