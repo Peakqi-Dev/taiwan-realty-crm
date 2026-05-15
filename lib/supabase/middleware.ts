@@ -14,6 +14,10 @@ const PUBLIC_PATHS = [
   ...AUTH_ONLY_PATHS,
 ];
 
+// Admin-only routes: signed-in but non-admin users are bounced to /app.
+const ADMIN_PATHS = ["/admin"];
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "peakqi.ai@gmail.com";
+
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
@@ -22,6 +26,10 @@ function isAuthOnly(pathname: string) {
   return AUTH_ONLY_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
+}
+
+function isAdminPath(pathname: string) {
+  return ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 /**
@@ -62,6 +70,14 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAuthOnly(request.nextUrl.pathname)) {
+    const redirect = request.nextUrl.clone();
+    redirect.pathname = "/app";
+    redirect.searchParams.delete("next");
+    return NextResponse.redirect(redirect);
+  }
+
+  // Admin gate: signed-in non-admin users get bounced to /app.
+  if (user && isAdminPath(request.nextUrl.pathname) && user.email !== ADMIN_EMAIL) {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/app";
     redirect.searchParams.delete("next");
