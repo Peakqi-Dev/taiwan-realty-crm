@@ -45,7 +45,7 @@ function Nav() {
             登入
           </Link>
           <Link
-            href="/signup"
+            href="/beta"
             className="rounded-md bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-slate-200"
           >
             免費申請 Beta
@@ -71,7 +71,7 @@ function Footer() {
           </div>
           <div className="flex items-center gap-5">
             <Link href="/login" className="hover:text-slate-200">登入</Link>
-            <Link href="/signup" className="hover:text-slate-200">申請 Beta</Link>
+            <Link href="/beta" className="hover:text-slate-200">申請 Beta</Link>
             <a href="#faq" className="hover:text-slate-200">FAQ</a>
           </div>
         </div>

@@ -57,7 +57,7 @@ function Hero() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                href="/signup"
+                href="/beta"
                 className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-white/10 transition-colors hover:bg-slate-100"
               >
                 免費申請 Beta
@@ -629,7 +629,7 @@ function FinalCTA() {
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
-            href="/signup"
+            href="/beta"
             className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-3.5 text-sm font-semibold text-slate-950 shadow-lg shadow-white/10 transition-colors hover:bg-slate-100"
           >
             免費申請 Beta

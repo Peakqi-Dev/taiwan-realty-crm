@@ -8,6 +8,7 @@ const AUTH_ONLY_PATHS = ["/login", "/signup"];
 // Routes anyone can visit, signed in or not.
 const PUBLIC_PATHS = [
   "/",
+  "/beta", // Beta application page
   "/auth/callback",
   "/line/connect", // LIFF binding page — handles its own auth flow
   ...AUTH_ONLY_PATHS,
