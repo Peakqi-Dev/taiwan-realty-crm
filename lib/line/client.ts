@@ -1,5 +1,27 @@
 const LINE_API = "https://api.line.me/v2/bot";
 
+export interface LineProfile {
+  userId: string;
+  displayName: string;
+  pictureUrl?: string;
+  language?: string;
+}
+
+/**
+ * Fetch a LINE user's public profile (display name, avatar). Returns null
+ * when the user blocks profile access or the API fails.
+ */
+export async function getProfile(
+  accessToken: string,
+  userId: string,
+): Promise<LineProfile | null> {
+  const res = await fetch(`${LINE_API}/profile/${userId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as LineProfile;
+}
+
 interface LineTextMessage {
   type: "text";
   text: string;

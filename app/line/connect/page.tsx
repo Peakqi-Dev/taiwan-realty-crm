@@ -3,10 +3,7 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { bindLineAction } from "./actions";
+import { Loader2, Sparkles } from "lucide-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -16,54 +13,49 @@ declare global {
 }
 
 type Phase =
-  | { kind: "loading" }
+  | { kind: "loading"; message?: string }
   | { kind: "no_liff_id" }
   | { kind: "liff_error"; message: string }
-  | {
-      kind: "ready";
-      lineUserId: string;
-      displayName: string;
-      authedEmail: string | null;
-    }
-  | { kind: "bound"; displayName: string };
+  | { kind: "no_binding" };
 
 export default function LineConnectPage() {
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
-  const [submitting, setSubmitting] = useState(false);
 
   const initialize = useCallback(async () => {
     if (!liffId) {
       setPhase({ kind: "no_liff_id" });
       return;
     }
-    if (!window.liff) {
-      // Script tag will call us again on load.
-      return;
-    }
+    if (!window.liff) return;
 
     try {
+      setPhase({ kind: "loading", message: "正在連接 LINE..." });
       await window.liff.init({ liffId });
-
       if (!window.liff.isLoggedIn()) {
-        // Bounce into LINE login (returns to this page).
         window.liff.login({ redirectUri: window.location.href });
         return;
       }
-
       const profile = await window.liff.getProfile();
 
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      setPhase({
-        kind: "ready",
-        lineUserId: profile.userId,
-        displayName: profile.displayName || "LINE 用戶",
-        authedEmail: user?.email ?? null,
+      setPhase({ kind: "loading", message: "正在登入 LeadFlow..." });
+      const res = await fetch("/api/line/auto-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lineUserId: profile.userId,
+          redirectTo: "/app",
+        }),
       });
+      const data = await res.json();
+      if (!data?.ok || !data?.actionLink) {
+        if (data?.error === "no_binding") {
+          setPhase({ kind: "no_binding" });
+          return;
+        }
+        throw new Error(data?.error || "auto-login failed");
+      }
+      window.location.href = data.actionLink;
     } catch (err: any) {
       setPhase({
         kind: "liff_error",
@@ -73,25 +65,8 @@ export default function LineConnectPage() {
   }, [liffId]);
 
   useEffect(() => {
-    // If the SDK already loaded (e.g. fast nav back), try immediately.
     if (window.liff) initialize();
   }, [initialize]);
-
-  const onBind = async () => {
-    if (phase.kind !== "ready") return;
-    setSubmitting(true);
-    const result = await bindLineAction(phase.lineUserId);
-    setSubmitting(false);
-    if (!result.ok) {
-      toast.error(result.error || "綁定失敗");
-      return;
-    }
-    setPhase({ kind: "bound", displayName: phase.displayName });
-    toast.success("綁定完成");
-  };
-
-  const currentPath =
-    typeof window !== "undefined" ? window.location.pathname : "/line/connect";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -113,79 +88,39 @@ export default function LineConnectPage() {
           {phase.kind === "loading" && (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-              <p className="text-sm text-slate-400">正在連接 LINE...</p>
+              <p className="text-sm text-slate-400">
+                {phase.message ?? "正在連接 LINE..."}
+              </p>
             </div>
           )}
 
           {phase.kind === "no_liff_id" && (
             <NoticeCard
               title="LIFF 尚未設定"
-              body="管理員需要在 Vercel env 設定 NEXT_PUBLIC_LIFF_ID 後才能完成綁定。請等系統管理員配置完成。"
+              body="管理員還沒配置 NEXT_PUBLIC_LIFF_ID。請等系統管理員設定完成。"
             />
           )}
 
           {phase.kind === "liff_error" && (
             <NoticeCard
               title="LIFF 連線失敗"
-              body={`錯誤訊息：${phase.message}。請從 LINE 內的「綁定帳號」按鈕進入此頁。`}
+              body={`錯誤訊息：${phase.message}。請從 LINE Bot 對話視窗的「📊 打開助手」按鈕重新進入。`}
             />
           )}
 
-          {phase.kind === "ready" && phase.authedEmail && (
-            <>
-              <h1 className="text-xl font-semibold">綁定 LINE 帳號</h1>
-              <p className="mt-2 text-sm text-slate-400">
-                把你的 LINE 帳號連到 LeadFlow，之後就能用 LINE 直接跟 AI 助手講話建檔。
-              </p>
-              <div className="mt-5 space-y-2 rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm">
-                <Row label="LINE" value={phase.displayName} />
-                <Row label="LeadFlow" value={phase.authedEmail} />
-              </div>
-              <button
-                onClick={onBind}
-                disabled={submitting}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-white/10 transition-colors hover:bg-slate-100 disabled:opacity-60"
-              >
-                {submitting ? "綁定中..." : "確認綁定"}
-              </button>
-            </>
-          )}
-
-          {phase.kind === "ready" && !phase.authedEmail && (
-            <>
-              <h1 className="text-xl font-semibold">需要先登入 LeadFlow</h1>
-              <p className="mt-2 text-sm text-slate-400">
-                你已用 LINE 帳號「{phase.displayName}」登入。請接著登入或註冊 LeadFlow 帳號，系統會自動完成綁定。
-              </p>
-              <div className="mt-6 flex flex-col gap-2">
-                <Link
-                  href={`/login?next=${encodeURIComponent(currentPath)}`}
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-white/10 hover:bg-slate-100"
-                >
-                  登入既有帳號
-                </Link>
-                <Link
-                  href={`/signup`}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 hover:border-slate-600"
-                >
-                  建立新帳號
-                </Link>
-              </div>
-            </>
-          )}
-
-          {phase.kind === "bound" && (
-            <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <CheckCircle2 className="h-10 w-10 text-emerald-400" />
-              <h1 className="text-xl font-semibold">綁定完成</h1>
-              <p className="text-sm text-slate-400">
-                你可以關掉這個視窗了。回到 LINE 對助手講一句，它會幫你建檔。
+          {phase.kind === "no_binding" && (
+            <div className="space-y-3">
+              <h1 className="text-xl font-semibold">請先加好友</h1>
+              <p className="text-sm leading-relaxed text-slate-400">
+                你還沒加 LeadFlow Bot 為好友，沒辦法自動幫你登入。
+                <br />
+                打開 LINE 搜尋 LeadFlow 或從 /beta 頁面掃 QR 加好友，加完後再回來這頁就會直接進入助手。
               </p>
               <Link
-                href="/app"
-                className="mt-2 text-sm text-blue-300 hover:text-blue-200"
+                href="/beta"
+                className="inline-flex w-full items-center justify-center rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
               >
-                也可以打開 LeadFlow 看你的儀表板 →
+                打開 /beta 看 QR Code
               </Link>
             </div>
           )}
@@ -195,15 +130,6 @@ export default function LineConnectPage() {
           由 LeadFlow · Nivora AI 提供
         </p>
       </div>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-slate-100">{value}</span>
     </div>
   );
 }

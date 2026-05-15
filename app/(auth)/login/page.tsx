@@ -70,7 +70,7 @@ export default function LoginPage() {
               <Home className="h-6 w-6" />
             </div>
             <h1 className="text-xl font-semibold text-slate-900">LeadFlow AI 業務助手</h1>
-            <p className="text-sm text-slate-500">登入以管理你的客戶與物件</p>
+            <p className="text-sm text-slate-500">登入你的 AI 業務助手</p>
           </div>
 
           <Suspense fallback={null}>
@@ -78,9 +78,9 @@ export default function LoginPage() {
           </Suspense>
 
           <p className="mt-6 text-center text-xs text-slate-500">
-            還沒有帳號?{" "}
-            <Link href="/signup" className="text-blue-600 hover:underline">
-              建立帳號
+            還沒有帳號？
+            <Link href="/beta" className="text-blue-600 hover:underline">
+              免費申請 Beta →
             </Link>
           </p>
         </CardContent>

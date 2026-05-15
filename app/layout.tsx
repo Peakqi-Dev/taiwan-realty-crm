@@ -16,7 +16,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "LeadFlow AI 業務助手",
+  title: "LeadFlow — 你的 AI 房仲業務助手",
   description: "你的 AI 房仲業務助手。一句話建檔、提醒跟進、把時間留給成交。",
   appleWebApp: {
     capable: true,

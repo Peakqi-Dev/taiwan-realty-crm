@@ -76,7 +76,7 @@ function Footer() {
           </div>
         </div>
         <p className="mt-6 text-xs text-slate-600">
-          © {new Date().getFullYear()} LeadFlow · A Nivora AI product
+          © {new Date().getFullYear()} LeadFlow
         </p>
       </div>
     </footer>

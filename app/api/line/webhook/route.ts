@@ -6,9 +6,11 @@ import {
   pushMessage,
   textMessage,
   buttonsTemplate,
+  getProfile,
   type LineMessage,
 } from "@/lib/line/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { autoOnboardLineUser } from "@/lib/line/auto-onboard";
 import {
   patchClientDraft,
   formatDraftForConfirm,
@@ -114,7 +116,7 @@ async function handleEvent(
       return;
     }
     if (event.type === "message") {
-      await onMessage(event as LineMessageEvent, accessToken, liffUrl);
+      await onMessage(event as LineMessageEvent, accessToken);
       return;
     }
   } catch (err: any) {
@@ -127,18 +129,37 @@ async function onFollow(
   accessToken: string,
   liffUrl: string | null,
 ) {
-  const greeting = textMessage(
-    "👋 我是 LeadFlow，你的 AI 房仲業務助手。\n\n從現在開始，跟我講一句話就能建客戶檔案，每天早上我也會主動推當天該注意的事。\n\n先綁定一下你的 LeadFlow 帳號，我才知道是誰在跟我講話。",
-  );
-  const button: LineMessage = liffUrl
-    ? buttonsTemplate({
-        altText: "點此綁定 LeadFlow 帳號",
-        text: "點下面綁定 LeadFlow 帳號",
-        actions: [{ type: "uri", label: "綁定帳號", uri: liffUrl }],
-      })
-    : textMessage("(綁定連結尚未設定，請等管理員配置 LINE_LIFF_URL)");
+  const lineUserId = event.source.userId;
+  if (!lineUserId) return;
 
-  await replyMessage(accessToken, event.replyToken, [greeting, button]);
+  const profile = await getProfile(accessToken, lineUserId);
+  const displayName = profile?.displayName || "LINE 用戶";
+
+  try {
+    await autoOnboardLineUser(lineUserId, displayName);
+  } catch (err) {
+    console.error("[LINE webhook] auto-onboard failed:", err);
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage("👋 歡迎！系統正在配置中，請稍後再對我講話。"),
+    ]);
+    return;
+  }
+
+  const messages: LineMessage[] = [
+    textMessage(
+      `👋 ${displayName}，我是 LeadFlow，你的 AI 房仲業務助手。\n\n你的帳號已經建好了！直接跟我講客戶資訊就能建檔，例如：\n「王先生 3000 萬 信義區 三房」\n\n底部選單有：📝 新增客戶 / 📋 今日任務 / 📊 打開助手。`,
+    ),
+  ];
+  if (liffUrl) {
+    messages.push(
+      buttonsTemplate({
+        altText: "打開 LeadFlow 助手",
+        text: "想看完整資料，打開 LeadFlow 助手",
+        actions: [{ type: "uri", label: "打開助手", uri: liffUrl }],
+      }),
+    );
+  }
+  await replyMessage(accessToken, event.replyToken, messages);
 }
 
 async function onUnfollow(event: LineUnfollowEvent) {
@@ -151,11 +172,7 @@ async function onUnfollow(event: LineUnfollowEvent) {
     .eq("line_user_id", lineUserId);
 }
 
-async function onMessage(
-  event: LineMessageEvent,
-  accessToken: string,
-  liffUrl: string | null,
-) {
+async function onMessage(event: LineMessageEvent, accessToken: string) {
   if (event.message.type !== "text") return;
   const lineUserId = event.source.userId;
   if (!lineUserId) return;
@@ -168,15 +185,26 @@ async function onMessage(
     .eq("line_user_id", lineUserId)
     .maybeSingle();
 
+  // Auto-recover: user messaging us but no active binding (e.g. webhook
+  // delivered the message before the follow event, or admin manually
+  // unbound). Re-onboard inline so the conversation continues.
   if (!binding || binding.unbound_at) {
-    const button: LineMessage = liffUrl
-      ? buttonsTemplate({
-          altText: "點此綁定 LeadFlow 帳號",
-          text: "先綁定 LeadFlow 帳號，我才能幫你記東西",
-          actions: [{ type: "uri", label: "綁定帳號", uri: liffUrl }],
-        })
-      : textMessage("綁定連結尚未設定，請等管理員配置。");
-    await replyMessage(accessToken, event.replyToken, [button]);
+    const profile = await getProfile(accessToken, lineUserId);
+    const displayName = profile?.displayName || "LINE 用戶";
+    try {
+      await autoOnboardLineUser(lineUserId, displayName);
+    } catch (err) {
+      console.error("[LINE webhook] re-onboard failed:", err);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage("系統忙線中，請稍後再試一次 🙏"),
+      ]);
+      return;
+    }
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage(
+        `${displayName} 你好，帳號剛幫你建好了。再傳一次客戶資訊就會自動建檔 👇`,
+      ),
+    ]);
     return;
   }
 
