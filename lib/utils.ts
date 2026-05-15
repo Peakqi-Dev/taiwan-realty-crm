@@ -18,10 +18,13 @@ export function formatPriceWan(wan: number): string {
   return `${wan.toLocaleString("zh-TW")} 萬`;
 }
 
-/** 預算區間：min/max 任一為 undefined 也能顯示。 */
+/** 預算區間：min/max 任一為 undefined 也能顯示；min===max 顯示單一值。 */
 export function formatBudgetRange(min?: number, max?: number): string {
   if (min == null && max == null) return "未指定";
-  if (min != null && max != null) return `${formatPriceWan(min)} - ${formatPriceWan(max)}`;
+  if (min != null && max != null) {
+    if (min === max) return formatPriceWan(min);
+    return `${formatPriceWan(min)} - ${formatPriceWan(max)}`;
+  }
   if (min != null) return `${formatPriceWan(min)} 起`;
   return `至 ${formatPriceWan(max as number)}`;
 }
