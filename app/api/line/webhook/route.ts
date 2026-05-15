@@ -8,6 +8,18 @@ import {
   type LineMessage,
 } from "@/lib/line/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  parseClientDraft,
+  patchClientDraft,
+  formatDraftForConfirm,
+} from "@/lib/ai/parse-client";
+import {
+  getActiveDraft,
+  setDraft,
+  clearDraft,
+} from "@/lib/line/pending";
+import { classifyIntent } from "@/lib/line/intent";
+import { commitClientDraft } from "@/lib/line/commit-client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -131,7 +143,7 @@ async function onUnfollow(event: LineUnfollowEvent) {
     .eq("line_user_id", lineUserId);
 }
 
-// message: text-only routing for MVP scaffold. Full parsing flow lands in Session B.
+// message: routes text to the AI parse + multi-turn confirm flow for bound users.
 async function onMessage(
   event: LineMessageEvent,
   accessToken: string,
@@ -140,6 +152,7 @@ async function onMessage(
   if (event.message.type !== "text") return;
   const lineUserId = event.source.userId;
   if (!lineUserId) return;
+  const text = (event.message as { type: "text"; text: string }).text;
 
   const admin = createAdminClient();
   const { data: binding } = await admin
@@ -148,7 +161,6 @@ async function onMessage(
     .eq("line_user_id", lineUserId)
     .maybeSingle();
 
-  // Unbound (or previously unbound) → re-send LIFF link.
   if (!binding || binding.unbound_at) {
     const button: LineMessage = liffUrl
       ? buttonsTemplate({
@@ -161,10 +173,95 @@ async function onMessage(
     return;
   }
 
-  // Bound: scaffold reply. AI parsing + confirm flow lands in Session B.
-  await replyMessage(accessToken, event.replyToken, [
-    textMessage(
-      "收到。AI 建檔功能還在開發中，下一個版本會接上 — 你傳的內容會自動解析成客戶資料並請你確認。",
-    ),
-  ]);
+  const ownerUserId = binding.user_id as string;
+  const pending = await getActiveDraft(lineUserId);
+  const intent = classifyIntent(text);
+
+  // No pending draft → must be a fresh client description.
+  if (!pending) {
+    if (intent.kind === "confirm" || intent.kind === "cancel") {
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(
+          "目前沒有待確認的客戶資料。直接傳客戶資訊給我，例如：「王先生 3000 萬 信義區 三房」。",
+        ),
+      ]);
+      return;
+    }
+    await tryParseAndConfirm(accessToken, event.replyToken, lineUserId, text);
+    return;
+  }
+
+  // Pending draft exists.
+  if (intent.kind === "confirm") {
+    const result = await commitClientDraft(ownerUserId, pending);
+    if (!result.ok) {
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(`建檔失敗：${result.error}`),
+      ]);
+      return;
+    }
+    await clearDraft(lineUserId);
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage(
+        `✅ 已建檔「${pending.name}」。\n打開 LeadFlow 看詳細：https://taiwan-realty-crm.vercel.app/clients/${result.clientId}`,
+      ),
+    ]);
+    return;
+  }
+
+  if (intent.kind === "cancel") {
+    await clearDraft(lineUserId);
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage("已取消這筆建檔。"),
+    ]);
+    return;
+  }
+
+  if (intent.kind === "patch") {
+    try {
+      const patched = await patchClientDraft(pending, intent.instruction);
+      await setDraft(lineUserId, patched);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(formatDraftForConfirm(patched)),
+      ]);
+    } catch (err) {
+      console.error("[LINE webhook] patch failed:", err);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage("AI 慢半拍沒解出來，請再講一次「改 XX YY」。"),
+      ]);
+    }
+    return;
+  }
+
+  // freeform text while a draft is pending → treat as a brand-new client (replaces the draft).
+  await tryParseAndConfirm(accessToken, event.replyToken, lineUserId, text);
+}
+
+async function tryParseAndConfirm(
+  accessToken: string,
+  replyToken: string,
+  lineUserId: string,
+  text: string,
+) {
+  try {
+    const draft = await parseClientDraft(text);
+    if (!draft || !draft.name) {
+      await replyMessage(accessToken, replyToken, [
+        textMessage(
+          "我看不太懂這段，可以再說一次嗎？\n試試「王先生 3000 萬 信義區 三房 0912-345-678」這種格式。",
+        ),
+      ]);
+      return;
+    }
+    await setDraft(lineUserId, draft);
+    await replyMessage(accessToken, replyToken, [
+      textMessage(formatDraftForConfirm(draft)),
+    ]);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[LINE webhook] parse failed:", msg);
+    await replyMessage(accessToken, replyToken, [
+      textMessage("AI 解析失敗，請稍後再試一次。"),
+    ]);
+  }
 }
