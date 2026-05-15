@@ -26,6 +26,10 @@ import {
   matchClientsByHint,
   commitInteraction,
 } from "@/lib/line/commit-interaction";
+import {
+  commitEditClient,
+  formatPatchSummary,
+} from "@/lib/line/commit-edit-client";
 import { buildDailyBrief } from "@/lib/line/daily-brief";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -349,6 +353,41 @@ async function computeIntentMessages(
     return [textMessage(`✅ 已建立提醒：${dateLabel} · ${result.data.title}`)];
   }
 
+  if (result.intent === "edit_client") {
+    const { matches } = await matchClientsByHint(
+      ownerUserId,
+      result.data.client_name_hint,
+    );
+    if (matches.length === 0) {
+      return [
+        textMessage(
+          `找不到叫「${result.data.client_name_hint}」的客戶。要先建檔嗎？回一段客戶資訊就行，例如「${result.data.client_name_hint} 0912-345-678 信義區 三房」。`,
+        ),
+      ];
+    }
+    if (matches.length > 1) {
+      const names = matches.map((m) => m.name).join("、");
+      return [
+        textMessage(
+          `找到 ${matches.length} 個叫「${result.data.client_name_hint}」的客戶（${names}）。請說全名再試一次。`,
+        ),
+      ];
+    }
+    const matched = matches[0];
+    const result2 = await commitEditClient(ownerUserId, matched.id, result.data);
+    if (!result2.ok) {
+      return [textMessage(result2.error || "更新失敗")];
+    }
+    const summary = formatPatchSummary(result.data);
+    return [
+      textMessage(
+        summary
+          ? `✅ 已更新「${matched.name}」：${summary}`
+          : `✅ 已更新「${matched.name}」`,
+      ),
+    ];
+  }
+
   if (result.intent === "interaction") {
     const { matches } = await matchClientsByHint(
       ownerUserId,
@@ -394,6 +433,7 @@ function unknownReply(): LineMessage {
   return textMessage(
     "我看不太懂這段，幾種範例：\n" +
       "• 建客戶：「王先生 3000 萬 信義區 三房」\n" +
+      "• 改客戶：「改王先生預算 3500」\n" +
       "• 建提醒：「提醒我下週三聯絡王先生」\n" +
       "• 記互動：「今天帶林小姐看大安，覺得太貴」\n" +
       "• 查任務：「今天有什麼事」",

@@ -15,14 +15,42 @@ export interface InteractionDraft {
   property_hint: string | null;
 }
 
+export interface EditClientDraft {
+  client_name_hint: string;
+  patch: {
+    budget_min: number | null;
+    budget_max: number | null;
+    districts: string[] | null;
+    room_type: string | null;
+    status:
+      | "新客戶"
+      | "追蹤中"
+      | "帶看"
+      | "議價"
+      | "成交"
+      | "流失"
+      | null;
+    requirements: string | null;
+  };
+}
+
 export type IntentResult =
   | { intent: "client"; data: ClientDraft }
   | { intent: "reminder"; data: ReminderDraft }
   | { intent: "interaction"; data: InteractionDraft }
+  | { intent: "edit_client"; data: EditClientDraft }
   | { intent: "today_tasks"; data: Record<string, never> }
   | { intent: "unknown"; data: { reason: string } };
 
 const INTERACTION_TYPES = ["電話", "帶看", "LINE", "成交", "其他"] as const;
+const CLIENT_STATUSES = [
+  "新客戶",
+  "追蹤中",
+  "帶看",
+  "議價",
+  "成交",
+  "流失",
+] as const;
 
 function todayTaipei(): string {
   return new Intl.DateTimeFormat("zh-Hant-TW", {
@@ -40,6 +68,7 @@ function systemPrompt(today: string): string {
 
 【意圖】
 - "client": 描述新客戶（含姓名 + 預算 / 區域 / 房型 等買賣需求）
+- "edit_client": 修改既有客戶資料（例「改王先生預算 3500」「林小姐改成議價中」「王俊豪偏好區域加大安」）
 - "reminder": 要建立提醒（含時間 + 動作，例「提醒我下週三聯絡王先生」）
 - "interaction": 記錄已發生的互動（已知客戶 + 動作 + 反饋，例「今天帶林小姐看大安的房，她覺得太貴」）
 - "today_tasks": 詢問今日待辦（例「今天有什麼事」、「今日任務」、「今天該做什麼」）
@@ -92,6 +121,23 @@ intent="interaction":
     "property_hint": string | null
   }
 }
+
+intent="edit_client":
+{
+  "intent": "edit_client",
+  "data": {
+    "client_name_hint": string,                       // 要修改的客戶
+    "patch": {
+      "budget_min": number | null,                    // 萬元，只在使用者提到預算時填
+      "budget_max": number | null,                    // 同上；單一數字填 budget_min=budget_max
+      "districts": string[] | null,                   // 完整覆蓋；不要 partial（「加大安」也整組填）
+      "room_type": string | null,
+      "status": "新客戶" | "追蹤中" | "帶看" | "議價" | "成交" | "流失" | null,
+      "requirements": string | null
+    }
+  }
+}
+（patch 內未提及的欄位一律 null，不要硬填。）
 
 intent="today_tasks":
 { "intent": "today_tasks", "data": {} }
@@ -162,6 +208,63 @@ function sanitizeReminder(raw: Record<string, unknown>): ReminderDraft | null {
   };
 }
 
+function sanitizeEditClient(raw: Record<string, unknown>): EditClientDraft | null {
+  const hint =
+    typeof raw.client_name_hint === "string" ? raw.client_name_hint.trim() : "";
+  if (!hint) return null;
+  const patchRaw =
+    (raw.patch as Record<string, unknown> | undefined) ?? {};
+
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  };
+  const str = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    return s ? s : null;
+  };
+
+  let min = num(patchRaw.budget_min);
+  let max = num(patchRaw.budget_max);
+  if (min !== null && max !== null && min > max) [min, max] = [max, min];
+
+  const districtsRaw = patchRaw.districts;
+  const districts = Array.isArray(districtsRaw)
+    ? districtsRaw
+        .map((d) => (typeof d === "string" ? d.trim() : ""))
+        .filter((d): d is string => d.length > 0)
+    : null;
+
+  const statusStr = str(patchRaw.status);
+  const status =
+    statusStr && (CLIENT_STATUSES as readonly string[]).includes(statusStr)
+      ? (statusStr as EditClientDraft["patch"]["status"])
+      : null;
+
+  const patch: EditClientDraft["patch"] = {
+    budget_min: min,
+    budget_max: max,
+    districts: districts && districts.length > 0 ? districts : null,
+    room_type: str(patchRaw.room_type),
+    status,
+    requirements: str(patchRaw.requirements),
+  };
+
+  // Reject if the patch is empty — model should fall back to "unknown" instead.
+  const hasAnything =
+    patch.budget_min !== null ||
+    patch.budget_max !== null ||
+    patch.districts !== null ||
+    patch.room_type !== null ||
+    patch.status !== null ||
+    patch.requirements !== null;
+  if (!hasAnything) return null;
+
+  return { client_name_hint: hint, patch };
+}
+
 function sanitizeInteraction(
   raw: Record<string, unknown>,
 ): InteractionDraft | null {
@@ -217,6 +320,11 @@ export async function classifyIntentAndExtract(
       const sanitized = sanitizeInteraction(data);
       if (!sanitized) return { intent: "unknown", data: { reason: "missing client_name_hint" } };
       return { intent: "interaction", data: sanitized };
+    }
+    case "edit_client": {
+      const sanitized = sanitizeEditClient(data);
+      if (!sanitized) return { intent: "unknown", data: { reason: "empty patch" } };
+      return { intent: "edit_client", data: sanitized };
     }
     case "today_tasks":
       return { intent: "today_tasks", data: {} };
