@@ -20,7 +20,12 @@ import {
   getActiveDraft,
   setDraft,
   clearDraft,
+  setAwaitingFeedback,
+  isAwaitingFeedback,
+  clearAwaitingFeedback,
 } from "@/lib/line/pending";
+import { saveFeedback } from "@/lib/line/feedback";
+import { tutorialText, TUTORIAL_QUICK_REPLIES } from "@/lib/line/tutorial";
 import { classifyIntent } from "@/lib/line/intent";
 import { commitClientDraft } from "@/lib/line/commit-client";
 import { commitReminder } from "@/lib/line/commit-reminder";
@@ -147,7 +152,8 @@ async function onFollow(
 
   const messages: LineMessage[] = [
     textMessage(
-      `👋 ${displayName}，我是 LeadFlow，你的 AI 房仲業務助手。\n\n你的帳號已經建好了！直接跟我講客戶資訊就能建檔，例如：\n「王先生 3000 萬 信義區 三房」\n\n底部選單有：📝 新增客戶 / 📋 今日任務 / 📊 打開助手。`,
+      `👋 ${displayName}，我是 LeadFlow，你的 AI 房仲業務助手。\n你的帳號已經建好了！\n\n跟我講一句話就能建檔，試試看 👇\n\n${tutorialText()}\n\n現在就試試，跟我說你的第一個客戶！`,
+      TUTORIAL_QUICK_REPLIES,
     ),
   ];
   if (liffUrl) {
@@ -210,6 +216,23 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
 
   const ownerUserId = binding.user_id as string;
 
+  // Awaiting-feedback flow: the user clicked 「意見回饋」 last; this message is the feedback.
+  if (await isAwaitingFeedback(lineUserId)) {
+    const trimmed = text.trim();
+    if (trimmed) {
+      await saveFeedback(lineUserId, trimmed);
+      await clearAwaitingFeedback(lineUserId);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(
+          "謝謝你的回饋 🙏 我會轉給團隊。\n\n要繼續用嗎？直接跟我講下一個客戶或操作就行。",
+          TUTORIAL_QUICK_REPLIES,
+        ),
+      ]);
+      return;
+    }
+    await clearAwaitingFeedback(lineUserId);
+  }
+
   // Fast paths — instant reply, no AI.
   if (text === "新增客戶") {
     await replyMessage(accessToken, event.replyToken, [
@@ -231,6 +254,26 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
         textMessage(BUSY_MESSAGE),
       ]);
     }
+    return;
+  }
+
+  if (text === "使用教學") {
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage(
+        `${tutorialText()}\n\n直接點下面試試看 👇`,
+        TUTORIAL_QUICK_REPLIES,
+      ),
+    ]);
+    return;
+  }
+
+  if (text === "意見回饋") {
+    await setAwaitingFeedback(lineUserId);
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage(
+        "有任何建議或問題，直接跟我說，我會轉給團隊 🙏\n\n（下一則訊息我會當作意見回饋，5 分鐘內有效）",
+      ),
+    ]);
     return;
   }
 

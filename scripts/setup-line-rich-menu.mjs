@@ -17,32 +17,27 @@ if (!TOKEN || !LIFF_URL) {
   process.exit(1);
 }
 
-const TILE_W = Math.floor(2500 / 3); // ~833
-const HEIGHT = 843;
+const W = 2500;
+const H = 1686;
+const COL = Math.floor(W / 3); // ~833
+const LAST_COL = W - COL * 2;
+const ROW = Math.floor(H / 2); // 843
+const LAST_ROW = H - ROW;
 
 const richMenu = {
-  size: { width: 2500, height: HEIGHT },
+  size: { width: W, height: H },
   selected: true,
   name: "LeadFlow main",
   chatBarText: "選單",
   areas: [
-    {
-      bounds: { x: 0, y: 0, width: TILE_W, height: HEIGHT },
-      action: { type: "message", text: "新增客戶" },
-    },
-    {
-      bounds: { x: TILE_W, y: 0, width: TILE_W, height: HEIGHT },
-      action: { type: "message", text: "今日任務" },
-    },
-    {
-      bounds: {
-        x: TILE_W * 2,
-        y: 0,
-        width: 2500 - TILE_W * 2,
-        height: HEIGHT,
-      },
-      action: { type: "uri", label: "打開助手", uri: LIFF_URL },
-    },
+    // Top row
+    { bounds: { x: 0, y: 0, width: COL, height: ROW }, action: { type: "message", text: "新增客戶" } },
+    { bounds: { x: COL, y: 0, width: COL, height: ROW }, action: { type: "message", text: "今日任務" } },
+    { bounds: { x: COL * 2, y: 0, width: LAST_COL, height: ROW }, action: { type: "uri", label: "打開助手", uri: LIFF_URL } },
+    // Bottom row
+    { bounds: { x: 0, y: ROW, width: COL, height: LAST_ROW }, action: { type: "message", text: "使用教學" } },
+    { bounds: { x: COL, y: ROW, width: COL, height: LAST_ROW }, action: { type: "message", text: "意見回饋" } },
+    { bounds: { x: COL * 2, y: ROW, width: LAST_COL, height: LAST_ROW }, action: { type: "uri", label: "我的帳號", uri: LIFF_URL } },
   ],
 };
 

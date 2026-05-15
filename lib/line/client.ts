@@ -22,8 +22,9 @@ export async function getProfile(
   return (await res.json()) as LineProfile;
 }
 
-interface LineTextMessage {
-  type: "text";
+interface LineMessageAction {
+  type: "message";
+  label: string;
   text: string;
 }
 
@@ -31,6 +32,18 @@ interface LineUriAction {
   type: "uri";
   label: string;
   uri: string;
+}
+
+type LineQuickReplyAction = LineMessageAction | LineUriAction;
+
+interface LineQuickReply {
+  items: { type: "action"; action: LineQuickReplyAction }[];
+}
+
+interface LineTextMessage {
+  type: "text";
+  text: string;
+  quickReply?: LineQuickReply;
 }
 
 interface LineButtonTemplateMessage {
@@ -90,8 +103,17 @@ export async function pushMessage(
   return { ok: true, status: res.status };
 }
 
-export function textMessage(text: string): LineTextMessage {
-  return { type: "text", text };
+export function textMessage(
+  text: string,
+  quickReplies?: LineQuickReplyAction[],
+): LineTextMessage {
+  const msg: LineTextMessage = { type: "text", text };
+  if (quickReplies && quickReplies.length > 0) {
+    msg.quickReply = {
+      items: quickReplies.map((action) => ({ type: "action", action })),
+    };
+  }
+  return msg;
 }
 
 export function buttonsTemplate(opts: {

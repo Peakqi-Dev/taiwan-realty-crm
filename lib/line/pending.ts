@@ -62,3 +62,42 @@ export async function clearDraft(lineUserId: string): Promise<void> {
     .eq("line_user_id", lineUserId)
     .eq("kind", KIND_CLIENT_DRAFT);
 }
+
+const KIND_AWAITING_FEEDBACK = "awaiting_feedback";
+
+/** Mark this LINE user as expecting their next message to be feedback. */
+export async function setAwaitingFeedback(lineUserId: string): Promise<void> {
+  const admin = createAdminClient();
+  await admin
+    .from("line_pending_actions")
+    .delete()
+    .eq("line_user_id", lineUserId)
+    .eq("kind", KIND_AWAITING_FEEDBACK);
+  await admin.from("line_pending_actions").insert({
+    line_user_id: lineUserId,
+    kind: KIND_AWAITING_FEEDBACK,
+    payload: {},
+    expires_at: new Date(Date.now() + TTL_MINUTES * 60_000).toISOString(),
+  });
+}
+
+export async function isAwaitingFeedback(lineUserId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("line_pending_actions")
+    .select("id")
+    .eq("line_user_id", lineUserId)
+    .eq("kind", KIND_AWAITING_FEEDBACK)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  return !!data;
+}
+
+export async function clearAwaitingFeedback(lineUserId: string): Promise<void> {
+  const admin = createAdminClient();
+  await admin
+    .from("line_pending_actions")
+    .delete()
+    .eq("line_user_id", lineUserId)
+    .eq("kind", KIND_AWAITING_FEEDBACK);
+}
