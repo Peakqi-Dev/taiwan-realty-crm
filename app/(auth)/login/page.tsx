@@ -69,7 +69,7 @@ export default function LoginPage() {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
               <Home className="h-6 w-6" />
             </div>
-            <h1 className="text-xl font-semibold text-slate-900">房仲業務 CRM</h1>
+            <h1 className="text-xl font-semibold text-slate-900">LeadFlow AI 業務助手</h1>
             <p className="text-sm text-slate-500">登入以管理你的客戶與物件</p>
           </div>
 

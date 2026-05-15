@@ -19,7 +19,7 @@ export function Sidebar() {
           <Home className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold leading-tight">房仲業務 CRM</p>
+          <p className="font-semibold leading-tight">LeadFlow AI 業務助手</p>
           <p className="text-xs text-slate-400">Taiwan Realty</p>
         </div>
       </div>

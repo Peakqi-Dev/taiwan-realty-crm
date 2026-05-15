@@ -30,7 +30,7 @@ export default function SignupPage() {
               <Home className="h-6 w-6" />
             </div>
             <h1 className="text-xl font-semibold text-slate-900">建立帳號</h1>
-            <p className="text-sm text-slate-500">註冊房仲業務 CRM</p>
+            <p className="text-sm text-slate-500">註冊 LeadFlow AI 業務助手</p>
           </div>
 
           <form action={formAction} className="space-y-4">

@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "房仲業務 CRM",
+  title: "LeadFlow AI 業務助手",
   description: "專為台灣房屋仲介個人業務員設計的客戶與物件管理工具",
 };
 

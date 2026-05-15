@@ -11,7 +11,7 @@ function pageTitleFor(pathname: string): string {
   const match = NAV_ITEMS.find(
     (item) => item.href !== "/" && pathname.startsWith(item.href),
   );
-  return match?.label ?? "房仲業務 CRM";
+  return match?.label ?? "LeadFlow AI 業務助手";
 }
 
 interface HeaderProps {
@@ -27,7 +27,7 @@ export function Header({ user }: HeaderProps) {
     <header className="sticky top-0 z-20 h-16 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="flex h-full items-center justify-between px-4 md:px-6">
         <div>
-          <p className="text-xs text-slate-500">房仲業務 CRM</p>
+          <p className="text-xs text-slate-500">LeadFlow AI 業務助手</p>
           <h1 className="text-lg font-semibold text-slate-900">
             {pageTitleFor(pathname)}
           </h1>
