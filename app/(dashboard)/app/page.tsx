@@ -6,16 +6,19 @@ import {
   Bell,
   Building2,
   CalendarClock,
+  MessageSquare,
   Phone,
+  Plus,
   TrendingUp,
   UserPlus,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ReminderItem } from "@/components/reminders/reminder-item";
 import { ClientStatusBadge } from "@/components/clients/client-status-badge";
-import { useProperties } from "@/hooks/use-properties";
-import { useClients } from "@/hooks/use-clients";
-import { useReminders } from "@/hooks/use-reminders";
+import { useProperties, usePropertyStore } from "@/hooks/use-properties";
+import { useClients, useClientStore } from "@/hooks/use-clients";
+import { useReminders, useReminderStore } from "@/hooks/use-reminders";
 import { useInteractions } from "@/hooks/use-interactions";
 import { daysFromNow, formatRelative } from "@/lib/utils";
 
@@ -66,6 +69,15 @@ export default function DashboardPage() {
   const reminders = useReminders();
   const interactions = useInteractions();
 
+  // Initialised flags from each store; once all three are loaded and empty
+  // we replace the dashboard with an onboarding card.
+  const propertiesReady = usePropertyStore((s) => s.initialized);
+  const clientsReady = useClientStore((s) => s.initialized);
+  const remindersReady = useReminderStore((s) => s.initialized);
+  const allReady = propertiesReady && clientsReady && remindersReady;
+  const allEmpty =
+    properties.length === 0 && clients.length === 0 && reminders.length === 0;
+
   const stats = useMemo(() => {
     const showingsThisMonth = interactions.filter(
       (i) => i.type === "帶看" && isInCurrentMonth(i.createdAt),
@@ -95,6 +107,8 @@ export default function DashboardPage() {
       .sort((a, b) => b.lastContactAt.getTime() - a.lastContactAt.getTime())
       .slice(0, 5);
   }, [clients]);
+
+  if (allReady && allEmpty) return <OnboardingCard />;
 
   return (
     <div className="space-y-6">
@@ -198,5 +212,91 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function OnboardingCard() {
+  return (
+    <div className="mx-auto max-w-2xl">
+      <Card>
+        <CardContent className="p-8 sm:p-10">
+          <div className="flex flex-col items-start gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+              <MessageSquare className="h-3 w-3" />
+              第一次使用
+            </span>
+            <h1 className="text-2xl font-bold text-slate-900">
+              👋 歡迎使用 LeadFlow！
+            </h1>
+            <p className="text-sm text-slate-500">
+              三步開始，把客戶建檔交給 AI 助手。
+            </p>
+          </div>
+
+          <ol className="mt-6 space-y-3 text-sm text-slate-700">
+            <Step
+              n="1"
+              title="回 LINE 跟助手講一句話"
+              body={
+                <>
+                  例如：<span className="font-medium">「王先生 3000 萬 信義區 三房」</span>
+                </>
+              }
+            />
+            <Step
+              n="2"
+              title="AI 自動幫你建好客戶檔案"
+              body="助手會回確認卡，回「對」就建檔，回「改 預算 2500」就調整。"
+            />
+            <Step
+              n="3"
+              title="之後每天早上助手會告訴你該做什麼"
+              body="需要跟進的客戶、即將到期的委託、今天的提醒，08:30 推送。"
+            />
+          </ol>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Button asChild className="sm:flex-1">
+              <Link href="/clients/new">
+                <Plus className="mr-1 h-4 w-4" />
+                直接在這裡新增客戶
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="sm:flex-1">
+              <Link href="/properties/new">
+                <Plus className="mr-1 h-4 w-4" />
+                新增物件
+              </Link>
+            </Button>
+          </div>
+
+          <p className="mt-6 text-xs text-slate-400">
+            還沒加 Bot 為好友？打開 LINE 搜尋 LeadFlow 或從 /beta 頁面掃 QR。
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function Step({
+  n,
+  title,
+  body,
+}: {
+  n: string;
+  title: string;
+  body: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-4 rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-sm font-bold text-white">
+        {n}
+      </span>
+      <div>
+        <p className="font-semibold text-slate-900">{title}</p>
+        <p className="mt-0.5 text-sm text-slate-500">{body}</p>
+      </div>
+    </li>
   );
 }

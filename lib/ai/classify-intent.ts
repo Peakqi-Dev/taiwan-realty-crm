@@ -1,0 +1,233 @@
+import { chatComplete, extractJson } from "./minimax";
+import type { ClientDraft } from "./parse-client";
+
+export interface ReminderDraft {
+  title: string;
+  remind_at_iso: string | null; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
+  remind_at_phrase: string;
+  target_client_name: string | null;
+}
+
+export interface InteractionDraft {
+  client_name_hint: string;
+  type: "電話" | "帶看" | "LINE" | "成交" | "其他";
+  note: string;
+  property_hint: string | null;
+}
+
+export type IntentResult =
+  | { intent: "client"; data: ClientDraft }
+  | { intent: "reminder"; data: ReminderDraft }
+  | { intent: "interaction"; data: InteractionDraft }
+  | { intent: "today_tasks"; data: Record<string, never> }
+  | { intent: "unknown"; data: { reason: string } };
+
+const INTERACTION_TYPES = ["電話", "帶看", "LINE", "成交", "其他"] as const;
+
+function todayTaipei(): string {
+  return new Intl.DateTimeFormat("zh-Hant-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(new Date())
+    .replace(/\//g, "-");
+}
+
+function systemPrompt(today: string): string {
+  return `你是房仲業務助手 LeadFlow 的訊息分類器。判斷使用者意圖，並抽取對應資料。
+
+【意圖】
+- "client": 描述新客戶（含姓名 + 預算 / 區域 / 房型 等買賣需求）
+- "reminder": 要建立提醒（含時間 + 動作，例「提醒我下週三聯絡王先生」）
+- "interaction": 記錄已發生的互動（已知客戶 + 動作 + 反饋，例「今天帶林小姐看大安的房，她覺得太貴」）
+- "today_tasks": 詢問今日待辦（例「今天有什麼事」、「今日任務」、「今天該做什麼」）
+- "unknown": 無法歸類或資訊不足
+
+【時間】當前日期（Asia/Taipei）：${today}。相對時間（明天、下週三、5/21、後天下午 3 點）以這個日期換算成 ISO「YYYY-MM-DD」或「YYYY-MM-DDTHH:mm」。無法判斷就放 null。
+
+【金額】單位「萬元」。「3000 萬」→ 3000；「1.2 億」→ 12000；「3000-3500 萬」→ budget_min=3000, budget_max=3500。
+
+【輸出規則】
+- 只輸出單一 JSON 物件，無說明、無 markdown fence、無 <think> 標籤。
+- 第一個字必須是 {，最後一個字必須是 }。
+
+【JSON schema 依 intent 分歧】
+
+intent="client":
+{
+  "intent": "client",
+  "data": {
+    "name": string | null,
+    "phone": string | null,
+    "line_id": string | null,
+    "type": "買方" | "賣方" | "租客" | "房東" | null,
+    "budget_min": number | null,
+    "budget_max": number | null,
+    "districts": string[],
+    "room_type": string | null,
+    "notes": string
+  }
+}
+
+intent="reminder":
+{
+  "intent": "reminder",
+  "data": {
+    "title": string,                       // 提醒主旨，例「聯絡王先生」
+    "remind_at_iso": string | null,        // 例「2026-05-21」或「2026-05-21T15:00」
+    "remind_at_phrase": string,            // 原文時間描述
+    "target_client_name": string | null    // 牽涉客戶時填，例「王先生」
+  }
+}
+
+intent="interaction":
+{
+  "intent": "interaction",
+  "data": {
+    "client_name_hint": string,            // 客戶姓名線索
+    "type": "電話" | "帶看" | "LINE" | "成交" | "其他",
+    "note": string,
+    "property_hint": string | null
+  }
+}
+
+intent="today_tasks":
+{ "intent": "today_tasks", "data": {} }
+
+intent="unknown":
+{ "intent": "unknown", "data": { "reason": string } }`;
+}
+
+const ALLOWED_CLIENT_TYPES = new Set(["買方", "賣方", "租客", "房東"]);
+
+function sanitizeClient(raw: Record<string, unknown>): ClientDraft {
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  };
+  const str = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    return s ? s : null;
+  };
+  const typeRaw = str(raw.type);
+  const type =
+    typeRaw && ALLOWED_CLIENT_TYPES.has(typeRaw)
+      ? (typeRaw as ClientDraft["type"])
+      : null;
+  const districts = Array.isArray(raw.districts)
+    ? raw.districts
+        .map((d) => (typeof d === "string" ? d.trim() : ""))
+        .filter((d): d is string => d.length > 0)
+    : [];
+  let min = num(raw.budget_min);
+  let max = num(raw.budget_max);
+  if (min !== null && max !== null && min > max) [min, max] = [max, min];
+  return {
+    name: str(raw.name),
+    phone: str(raw.phone),
+    line_id: str(raw.line_id),
+    type,
+    budget_min: min,
+    budget_max: max,
+    districts,
+    room_type: str(raw.room_type),
+    notes: typeof raw.notes === "string" ? raw.notes.trim() : "",
+  };
+}
+
+function sanitizeReminder(raw: Record<string, unknown>): ReminderDraft | null {
+  const title = typeof raw.title === "string" ? raw.title.trim() : "";
+  if (!title) return null;
+  const iso = typeof raw.remind_at_iso === "string" ? raw.remind_at_iso.trim() : "";
+  let validIso: string | null = null;
+  if (iso) {
+    // Accept YYYY-MM-DD or YYYY-MM-DDTHH:mm or full ISO
+    if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(iso)) {
+      validIso = iso;
+    }
+  }
+  return {
+    title,
+    remind_at_iso: validIso,
+    remind_at_phrase:
+      typeof raw.remind_at_phrase === "string" ? raw.remind_at_phrase.trim() : "",
+    target_client_name:
+      typeof raw.target_client_name === "string" && raw.target_client_name.trim()
+        ? raw.target_client_name.trim()
+        : null,
+  };
+}
+
+function sanitizeInteraction(
+  raw: Record<string, unknown>,
+): InteractionDraft | null {
+  const hint =
+    typeof raw.client_name_hint === "string" ? raw.client_name_hint.trim() : "";
+  if (!hint) return null;
+  const typeRaw = typeof raw.type === "string" ? raw.type.trim() : "";
+  const type = (INTERACTION_TYPES as readonly string[]).includes(typeRaw)
+    ? (typeRaw as InteractionDraft["type"])
+    : "其他";
+  return {
+    client_name_hint: hint,
+    type,
+    note: typeof raw.note === "string" ? raw.note.trim() : "",
+    property_hint:
+      typeof raw.property_hint === "string" && raw.property_hint.trim()
+        ? raw.property_hint.trim()
+        : null,
+  };
+}
+
+export async function classifyIntentAndExtract(
+  text: string,
+): Promise<IntentResult | null> {
+  const today = todayTaipei();
+  const { text: completion } = await chatComplete({
+    messages: [
+      { role: "system", content: systemPrompt(today) },
+      { role: "user", content: text },
+    ],
+    temperature: 0.1,
+    maxTokens: 500,
+    timeoutMs: 9000,
+  });
+
+  const raw = extractJson<{ intent?: unknown; data?: unknown }>(completion);
+  if (!raw || typeof raw.intent !== "string") return null;
+
+  const data = (raw.data as Record<string, unknown>) ?? {};
+
+  switch (raw.intent) {
+    case "client": {
+      const sanitized = sanitizeClient(data);
+      if (!sanitized.name) return { intent: "unknown", data: { reason: "missing name" } };
+      return { intent: "client", data: sanitized };
+    }
+    case "reminder": {
+      const sanitized = sanitizeReminder(data);
+      if (!sanitized) return { intent: "unknown", data: { reason: "missing title" } };
+      return { intent: "reminder", data: sanitized };
+    }
+    case "interaction": {
+      const sanitized = sanitizeInteraction(data);
+      if (!sanitized) return { intent: "unknown", data: { reason: "missing client_name_hint" } };
+      return { intent: "interaction", data: sanitized };
+    }
+    case "today_tasks":
+      return { intent: "today_tasks", data: {} };
+    case "unknown":
+      return {
+        intent: "unknown",
+        data: {
+          reason: typeof data.reason === "string" ? data.reason : "unknown",
+        },
+      };
+    default:
+      return null;
+  }
+}

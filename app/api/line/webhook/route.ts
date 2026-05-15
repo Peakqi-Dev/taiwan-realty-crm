@@ -9,10 +9,10 @@ import {
 } from "@/lib/line/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  parseClientDraft,
   patchClientDraft,
   formatDraftForConfirm,
 } from "@/lib/ai/parse-client";
+import { classifyIntentAndExtract } from "@/lib/ai/classify-intent";
 import {
   getActiveDraft,
   setDraft,
@@ -20,6 +20,11 @@ import {
 } from "@/lib/line/pending";
 import { classifyIntent } from "@/lib/line/intent";
 import { commitClientDraft } from "@/lib/line/commit-client";
+import { commitReminder } from "@/lib/line/commit-reminder";
+import {
+  matchClientsByHint,
+  commitInteraction,
+} from "@/lib/line/commit-interaction";
 import { buildDailyBrief } from "@/lib/line/daily-brief";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -213,7 +218,7 @@ async function onMessage(
       ]);
       return;
     }
-    await tryParseAndConfirm(accessToken, event.replyToken, lineUserId, text);
+    await tryParseAndConfirm(accessToken, event.replyToken, lineUserId, text, ownerUserId);
     return;
   }
 
@@ -259,8 +264,8 @@ async function onMessage(
     return;
   }
 
-  // freeform text while a draft is pending → treat as a brand-new client (replaces the draft).
-  await tryParseAndConfirm(accessToken, event.replyToken, lineUserId, text);
+  // freeform text while a draft is pending → re-route through the classifier.
+  await tryParseAndConfirm(accessToken, event.replyToken, lineUserId, text, ownerUserId);
 }
 
 async function tryParseAndConfirm(
@@ -268,21 +273,109 @@ async function tryParseAndConfirm(
   replyToken: string,
   lineUserId: string,
   text: string,
+  ownerUserId: string,
 ) {
   try {
-    const draft = await parseClientDraft(text);
-    if (!draft || !draft.name) {
+    const result = await classifyIntentAndExtract(text);
+    if (!result) {
+      await replyUnknown(accessToken, replyToken);
+      return;
+    }
+
+    if (result.intent === "client") {
+      await setDraft(lineUserId, result.data);
+      await replyMessage(accessToken, replyToken, [
+        textMessage(formatDraftForConfirm(result.data)),
+      ]);
+      return;
+    }
+
+    if (result.intent === "today_tasks") {
+      const brief = await buildDailyBrief(ownerUserId);
+      await replyMessage(accessToken, replyToken, [textMessage(brief.text)]);
+      return;
+    }
+
+    if (result.intent === "reminder") {
+      let targetClientId: string | null = null;
+      if (result.data.target_client_name) {
+        const { matches } = await matchClientsByHint(
+          ownerUserId,
+          result.data.target_client_name,
+        );
+        if (matches.length === 1) targetClientId = matches[0].id;
+      }
+      const committed = await commitReminder(
+        ownerUserId,
+        result.data,
+        targetClientId,
+      );
+      if (!committed.ok) {
+        await replyMessage(accessToken, replyToken, [
+          textMessage(committed.error || "建立提醒失敗"),
+        ]);
+        return;
+      }
+      const when = new Date(committed.remindAt!);
+      const dateLabel = new Intl.DateTimeFormat("zh-Hant-TW", {
+        timeZone: "Asia/Taipei",
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(when);
+      await replyMessage(accessToken, replyToken, [
+        textMessage(`✅ 已建立提醒：${dateLabel} · ${result.data.title}`),
+      ]);
+      return;
+    }
+
+    if (result.intent === "interaction") {
+      const { matches } = await matchClientsByHint(
+        ownerUserId,
+        result.data.client_name_hint,
+      );
+      if (matches.length === 0) {
+        await replyMessage(accessToken, replyToken, [
+          textMessage(
+            `找不到叫「${result.data.client_name_hint}」的客戶。要不要先傳一段客戶資訊建檔？例如「${result.data.client_name_hint} 0912-345-678 信義區 三房」。`,
+          ),
+        ]);
+        return;
+      }
+      if (matches.length > 1) {
+        const names = matches.map((m) => m.name).join("、");
+        await replyMessage(accessToken, replyToken, [
+          textMessage(
+            `找到 ${matches.length} 個叫「${result.data.client_name_hint}」的客戶（${names}）。請說全名再試一次。`,
+          ),
+        ]);
+        return;
+      }
+      const matched = matches[0];
+      const committed = await commitInteraction(
+        ownerUserId,
+        matched.id,
+        result.data,
+      );
+      if (!committed.ok) {
+        await replyMessage(accessToken, replyToken, [
+          textMessage(committed.error || "建立互動紀錄失敗"),
+        ]);
+        return;
+      }
       await replyMessage(accessToken, replyToken, [
         textMessage(
-          "我看不太懂這段，可以再說一次嗎？\n試試「王先生 3000 萬 信義區 三房 0912-345-678」這種格式。",
+          `✅ 已記錄：${matched.name} · ${result.data.type}${
+            result.data.note ? ` — ${result.data.note}` : ""
+          }`,
         ),
       ]);
       return;
     }
-    await setDraft(lineUserId, draft);
-    await replyMessage(accessToken, replyToken, [
-      textMessage(formatDraftForConfirm(draft)),
-    ]);
+
+    // unknown
+    await replyUnknown(accessToken, replyToken);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[LINE webhook] parse failed:", msg);
@@ -290,4 +383,16 @@ async function tryParseAndConfirm(
       textMessage("AI 解析失敗，請稍後再試一次。"),
     ]);
   }
+}
+
+async function replyUnknown(accessToken: string, replyToken: string) {
+  await replyMessage(accessToken, replyToken, [
+    textMessage(
+      "我看不太懂這段，幾種範例：\n" +
+        "• 建客戶：「王先生 3000 萬 信義區 三房」\n" +
+        "• 建提醒：「提醒我下週三聯絡王先生」\n" +
+        "• 記互動：「今天帶林小姐看大安，覺得太貴」\n" +
+        "• 查任務：「今天有什麼事」",
+    ),
+  ]);
 }
