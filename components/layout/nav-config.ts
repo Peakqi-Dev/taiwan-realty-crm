@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   MessagesSquare,
   QrCode,
+  UserCircle,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -21,4 +22,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/clients", label: "客戶管理", icon: Users },
   { href: "/reminders", label: "提醒事項", icon: Bell },
   { href: "/app/qr", label: "我的 QR", icon: QrCode },
+  { href: "/app/profile", label: "個人資料", icon: UserCircle },
 ];

@@ -10,6 +10,8 @@ export interface AdminOverview {
   usersThisWeek: number;
   clientsThisWeek: number;
   activeUsers: number; // last_sign_in_at within 7d
+  profileComplete: number; // agent_profiles with all 4 fields filled
+  profileCompleteRatio: number; // 0..1
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -22,18 +24,38 @@ export async function getAdminOverview(): Promise<AdminOverview> {
   const { data: users } = await admin.auth.admin.listUsers({ perPage: 1000 });
   const allUsers = users?.users ?? [];
 
-  const [{ count: betaCount }, { count: bindingCount }, { count: clientsThisWeek }] =
-    await Promise.all([
-      admin.from("beta_applications").select("*", { count: "exact", head: true }),
-      admin
-        .from("line_bindings")
-        .select("*", { count: "exact", head: true })
-        .is("unbound_at", null),
-      admin
-        .from("clients")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", weekAgo),
-    ]);
+  const [
+    { count: betaCount },
+    { count: bindingCount },
+    { count: clientsThisWeek },
+    { data: profiles },
+  ] = await Promise.all([
+    admin.from("beta_applications").select("*", { count: "exact", head: true }),
+    admin
+      .from("line_bindings")
+      .select("*", { count: "exact", head: true })
+      .is("unbound_at", null),
+    admin
+      .from("clients")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", weekAgo),
+    admin
+      .from("agent_profiles")
+      .select("display_name, phone, bio, line_id"),
+  ]);
+
+  // "Complete" = display_name customized (not the auto-backfill default
+  // "LeadFlow 業務") AND phone / bio / line_id all non-empty.
+  const profileRows = profiles ?? [];
+  const profileComplete = profileRows.filter((p: any) => {
+    const dn = ((p.display_name as string) ?? "").trim();
+    const ph = ((p.phone as string) ?? "").trim();
+    const bio = ((p.bio as string) ?? "").trim();
+    const lid = ((p.line_id as string) ?? "").trim();
+    return dn && dn !== "LeadFlow 業務" && ph && bio && lid;
+  }).length;
+  const profileCompleteRatio =
+    profileRows.length > 0 ? profileComplete / profileRows.length : 0;
 
   const usersThisWeek = allUsers.filter(
     (u: any) => u.created_at && new Date(u.created_at).getTime() >= Date.now() - WEEK_MS,
@@ -51,6 +73,8 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     usersThisWeek,
     clientsThisWeek: clientsThisWeek ?? 0,
     activeUsers,
+    profileComplete,
+    profileCompleteRatio,
   };
 }
 
@@ -121,6 +145,14 @@ export interface AdminUserDetail extends AdminUserRow {
   clientCount: number;
   propertyCount: number;
   reminderCount: number;
+  agentProfile: {
+    shortCode: string;
+    displayName: string;
+    phone: string;
+    bio: string;
+    photoUrl: string | null;
+    lineId: string;
+  } | null;
   betaApplication: {
     name: string | null;
     agency: string | null;
@@ -143,6 +175,7 @@ export async function getAdminUserDetail(
     { count: reminderCount },
     { data: binding },
     { data: beta },
+    { data: profile },
   ] = await Promise.all([
     admin
       .from("clients")
@@ -168,6 +201,11 @@ export async function getAdminUserDetail(
       .order("applied_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    admin
+      .from("agent_profiles")
+      .select("short_code, display_name, phone, bio, photo_url, line_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   return {
@@ -183,6 +221,16 @@ export async function getAdminUserDetail(
     clientCount: clientCount ?? 0,
     propertyCount: propertyCount ?? 0,
     reminderCount: reminderCount ?? 0,
+    agentProfile: profile
+      ? {
+          shortCode: (profile as any).short_code ?? "",
+          displayName: (profile as any).display_name ?? "",
+          phone: (profile as any).phone ?? "",
+          bio: (profile as any).bio ?? "",
+          photoUrl: ((profile as any).photo_url as string | null) ?? null,
+          lineId: (profile as any).line_id ?? "",
+        }
+      : null,
     betaApplication: beta
       ? {
           name: (beta as any).name ?? null,

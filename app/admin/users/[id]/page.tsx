@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getAdminUserDetail } from "@/lib/admin/queries";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { EditNameForm } from "./edit-name-form";
+import { EditAgentProfileForm } from "./edit-agent-profile-form";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,39 @@ export default async function AdminUserDetailPage({
                 label="最後登入"
                 value={u.lastSignInAt ? formatRelative(u.lastSignInAt) : "—"}
               />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              LeadFlow 個人資料（客戶看到的）
+            </p>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
+              {u.agentProfile ? (
+                <>
+                  <p className="mb-3 text-xs text-slate-500">
+                    短碼：
+                    <span className="font-mono text-slate-700">
+                      {u.agentProfile.shortCode}
+                    </span>{" "}
+                    · 連結 /r/{u.agentProfile.shortCode}
+                  </p>
+                  <EditAgentProfileForm
+                    userId={u.id}
+                    initial={{
+                      displayName: u.agentProfile.displayName,
+                      phone: u.agentProfile.phone,
+                      bio: u.agentProfile.bio,
+                      photoUrl: u.agentProfile.photoUrl ?? "",
+                      lineId: u.agentProfile.lineId,
+                    }}
+                  />
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  此用戶尚無 agent_profiles 資料。
+                </p>
+              )}
             </div>
           </div>
 

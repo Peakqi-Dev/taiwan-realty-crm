@@ -1,39 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export interface UpdateUserState {
+export interface SaveAgentProfileState {
   ok?: boolean;
   error?: string;
 }
 
-export async function updateUserNameAction(
-  userId: string,
-  _prev: UpdateUserState,
-  formData: FormData,
-): Promise<UpdateUserState> {
-  const displayName = String(formData.get("displayName") ?? "").trim();
-  if (!displayName) return { error: "姓名不能空白" };
-
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(userId, {
-    user_metadata: { display_name: displayName },
-  });
-  if (error) return { error: error.message };
-
-  revalidatePath(`/admin/users/${userId}`);
-  revalidatePath("/admin/users");
-  return { ok: true };
-}
-
 const URL_REGEX = /^https?:\/\/[^\s]+$/;
 
-export async function updateAgentProfileAction(
-  userId: string,
-  _prev: UpdateUserState,
+export async function saveAgentProfile(
+  _prev: SaveAgentProfileState,
   formData: FormData,
-): Promise<UpdateUserState> {
+): Promise<SaveAgentProfileState> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "未登入" };
+
   const displayName = String(formData.get("display_name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const bio = String(formData.get("bio") ?? "").trim();
@@ -42,9 +29,11 @@ export async function updateAgentProfileAction(
 
   if (!displayName) return { error: "顯示名稱必填" };
   if (displayName.length > 30) return { error: "顯示名稱請在 30 字以內" };
+  if (phone && phone.length > 30) return { error: "電話格式不正確" };
   if (bio.length > 200) return { error: "自我介紹請在 200 字以內" };
   if (photoUrl && !URL_REGEX.test(photoUrl))
     return { error: "大頭照網址需為完整 https URL" };
+  if (lineId && lineId.length > 50) return { error: "LINE ID 過長" };
 
   const admin = createAdminClient();
   const { error } = await admin
@@ -57,16 +46,11 @@ export async function updateAgentProfileAction(
       line_id: lineId,
       updated_at: new Date().toISOString(),
     })
-    .eq("user_id", userId);
-  if (error) return { error: error.message };
+    .eq("user_id", user.id);
+  if (error) return { error: `儲存失敗：${error.message}` };
 
-  // Keep auth user_metadata in sync so existing dashboard reads still work.
-  await admin.auth.admin.updateUserById(userId, {
-    user_metadata: { display_name: displayName },
-  });
-
-  revalidatePath(`/admin/users/${userId}`);
-  revalidatePath("/admin/users");
-  revalidatePath("/admin");
+  revalidatePath("/app/profile");
+  revalidatePath("/app/qr");
+  revalidatePath(`/r/`);
   return { ok: true };
 }

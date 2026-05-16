@@ -2,6 +2,7 @@ import {
   Activity,
   Building2,
   Calendar,
+  IdCard,
   MessageSquare,
   UserCheck,
   Users,
@@ -53,6 +54,13 @@ export default async function AdminOverviewPage() {
           accent="sky"
           hint="7 天內有登入紀錄"
         />
+        <Stat
+          title="完善資料用戶"
+          value={o.profileComplete}
+          icon={IdCard}
+          accent="indigo"
+          hint={`占總數 ${Math.round(o.profileCompleteRatio * 100)}%（名稱+電話+介紹+LINE ID 全填）`}
+        />
       </div>
     </div>
   );
@@ -65,6 +73,7 @@ const ACCENTS: Record<string, string> = {
   amber: "bg-amber-50 text-amber-700 border-amber-100",
   rose: "bg-rose-50 text-rose-700 border-rose-100",
   sky: "bg-sky-50 text-sky-700 border-sky-100",
+  indigo: "bg-indigo-50 text-indigo-700 border-indigo-100",
 };
 
 function Stat({
