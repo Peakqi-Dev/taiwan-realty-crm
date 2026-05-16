@@ -42,12 +42,18 @@ export async function GET(request: Request) {
   }
 
   let pushed = 0;
+  let skipped = 0;
   let failed = 0;
 
   for (const b of bindings ?? []) {
     try {
       const brief = await buildDailyBrief(b.user_id as string);
-      // Always push — even an empty day gets a "今天沒事" message.
+      // Skip the push entirely when there's nothing to tell them today.
+      // Pushes cost message quota; reaching out with "今天沒事" wastes it.
+      if (!brief.hasContent) {
+        skipped++;
+        continue;
+      }
       const result = await pushMessage(
         channelAccessToken,
         b.line_user_id as string,
@@ -73,6 +79,7 @@ export async function GET(request: Request) {
     ok: true,
     bindings: bindings?.length ?? 0,
     pushed,
+    skipped,
     failed,
   });
 }

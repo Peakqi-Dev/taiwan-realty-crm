@@ -4,8 +4,8 @@ import { verifyLineSignature } from "@/lib/line/signature";
 import {
   replyMessage,
   pushMessage,
+  startLoadingAnimation,
   textMessage,
-  buttonsTemplate,
   getProfile,
   type LineMessage,
 } from "@/lib/line/client";
@@ -70,7 +70,6 @@ type LineEvent = LineFollowEvent | LineUnfollowEvent | LineMessageEvent | { type
 export const dynamic = "force-dynamic";
 
 const BUSY_MESSAGE = "AI 暫時有點忙，請稍後再試 🙏";
-const PROCESSING_MESSAGE = "收到，處理中 ⏳";
 
 export async function POST(request: Request) {
   const { channelSecret, channelAccessToken, liffUrl } = lineEnv();
@@ -150,21 +149,15 @@ async function onFollow(
     return;
   }
 
+  // Single-message welcome: text + plain URL (LINE auto-renders preview).
+  // Skips the buttonsTemplate to keep the welcome at 1 outbound message.
+  const liffLine = liffUrl ? `\n\n想看完整資料 → ${liffUrl}` : "";
   const messages: LineMessage[] = [
     textMessage(
-      `👋 ${displayName}，我是 LeadFlow，你的 AI 房仲業務助手。\n你的帳號已經建好了！\n\n跟我講一句話就能建檔，試試看 👇\n\n${tutorialText()}\n\n現在就試試，跟我說你的第一個客戶！`,
+      `👋 ${displayName}，我是 LeadFlow，你的 AI 房仲業務助手。\n你的帳號已經建好了！\n\n跟我講一句話就能建檔，試試看 👇\n\n${tutorialText()}\n\n現在就試試，跟我說你的第一個客戶！${liffLine}`,
       TUTORIAL_QUICK_REPLIES,
     ),
   ];
-  if (liffUrl) {
-    messages.push(
-      buttonsTemplate({
-        altText: "打開 LeadFlow 助手",
-        text: "想看完整資料，打開 LeadFlow 助手",
-        actions: [{ type: "uri", label: "打開助手", uri: liffUrl }],
-      }),
-    );
-  }
   await replyMessage(accessToken, event.replyToken, messages);
 }
 
@@ -352,12 +345,13 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
 }
 
 /**
- * Reply with the "處理中" ack immediately, then run heavy work and Push the
- * result. Errors fall back to a generic busy message.
+ * Run heavy work (AI), then REPLY with the result using the original reply
+ * token. Replies are free; pushes count toward the LINE message quota, so
+ * we keep the work inside the reply window.
  *
- * The reply token can only be used once and within ~60s; this two-step
- * pattern keeps the perceived latency low (~200ms) while still delivering
- * the real answer once the AI returns.
+ * The user sees a typing indicator (loading animation, separate API, doesn't
+ * count as a message) while we wait. Reply tokens are valid for ~60s, well
+ * above our AI ceiling (~9s).
  */
 async function runWithAck(
   accessToken: string,
@@ -365,13 +359,9 @@ async function runWithAck(
   lineUserId: string,
   work: () => Promise<LineMessage[]>,
 ) {
-  // Don't block on the ack — fire it and continue. If it fails the user just
-  // sees the final push slightly later.
-  const ackPromise = replyMessage(accessToken, replyToken, [
-    textMessage(PROCESSING_MESSAGE),
-  ]).catch((err) => {
-    console.warn("[LINE webhook] ack reply failed:", err);
-    return undefined;
+  // Fire-and-forget: show typing indicator. Failure is harmless.
+  startLoadingAnimation(accessToken, lineUserId, 30).catch((err) => {
+    console.warn("[LINE webhook] loading animation failed:", err);
   });
 
   let messages: LineMessage[] = [];
@@ -382,15 +372,19 @@ async function runWithAck(
     messages = [textMessage(BUSY_MESSAGE)];
   }
 
-  await ackPromise;
   if (messages.length > 0) {
-    const pushed = await pushMessage(accessToken, lineUserId, messages);
-    if (!pushed.ok) {
-      console.error(
-        "[LINE webhook] push failed:",
-        pushed.status,
-        pushed.body ?? "",
+    const replied = await replyMessage(accessToken, replyToken, messages);
+    if (!replied.ok) {
+      // Reply token may have expired (>60s) — fall back to push so the user
+      // still gets the answer. Push DOES count toward quota.
+      console.warn(
+        "[LINE webhook] reply failed, falling back to push:",
+        replied.status,
+        replied.body ?? "",
       );
+      await pushMessage(accessToken, lineUserId, messages).catch((err) => {
+        console.error("[LINE webhook] push fallback failed:", err);
+      });
     }
   }
 }

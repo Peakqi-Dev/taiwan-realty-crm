@@ -82,6 +82,29 @@ export async function replyMessage(
 }
 
 /**
+ * Show a typing-style loading indicator in the user's chat for up to N
+ * seconds (5-60, rounded down to multiples of 5). Useful while running a
+ * slow operation (AI call) — does NOT count as a sent message.
+ * https://developers.line.biz/en/docs/messaging-api/use-loading-indicator/
+ */
+export async function startLoadingAnimation(
+  accessToken: string,
+  chatId: string,
+  loadingSeconds = 20,
+): Promise<{ ok: boolean; status: number; body?: string }> {
+  const res = await fetch(`${LINE_API}/chat/loading/start`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ chatId, loadingSeconds }),
+  });
+  if (!res.ok) return { ok: false, status: res.status, body: await res.text() };
+  return { ok: true, status: res.status };
+}
+
+/**
  * Push an unsolicited message to a LINE user (e.g. daily digest).
  */
 export async function pushMessage(
