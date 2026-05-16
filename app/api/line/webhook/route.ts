@@ -7,6 +7,7 @@ import {
   startLoadingAnimation,
   textMessage,
   getProfile,
+  linkRichMenuToUser,
   type LineMessage,
 } from "@/lib/line/client";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -97,7 +98,13 @@ export const dynamic = "force-dynamic";
 const BUSY_MESSAGE = "AI 暫時有點忙，請稍後再試 🙏";
 
 export async function POST(request: Request) {
-  const { channelSecret, channelAccessToken, liffUrl } = lineEnv();
+  const {
+    channelSecret,
+    channelAccessToken,
+    liffUrl,
+    agentRichMenuId,
+    customerRichMenuId,
+  } = lineEnv();
 
   if (!channelSecret || !channelAccessToken) {
     console.warn(
@@ -124,20 +131,31 @@ export async function POST(request: Request) {
 
   const events = payload.events ?? [];
   await Promise.all(
-    events.map((e) => handleEvent(e, channelAccessToken, liffUrl)),
+    events.map((e) =>
+      handleEvent(e, channelAccessToken, liffUrl, {
+        agentRichMenuId,
+        customerRichMenuId,
+      }),
+    ),
   );
 
   return NextResponse.json({ ok: true, processed: events.length });
+}
+
+interface RichMenuConfig {
+  agentRichMenuId: string | null;
+  customerRichMenuId: string | null;
 }
 
 async function handleEvent(
   event: LineEvent,
   accessToken: string,
   liffUrl: string | null,
+  richMenus: RichMenuConfig,
 ) {
   try {
     if (event.type === "follow") {
-      await onFollow(event as LineFollowEvent, accessToken, liffUrl);
+      await onFollow(event as LineFollowEvent, accessToken, liffUrl, richMenus);
       return;
     }
     if (event.type === "unfollow") {
@@ -157,6 +175,7 @@ async function onFollow(
   event: LineFollowEvent,
   accessToken: string,
   liffUrl: string | null,
+  richMenus: RichMenuConfig,
 ) {
   const lineUserId = event.source.userId;
   if (!lineUserId) return;
@@ -197,6 +216,21 @@ async function onFollow(
         `👋 ${displayName} 您好，歡迎加入 ${agentName} 的 LINE 客服。\n\n我是 ${agentName} 的 AI 助手，24 小時為您服務 💬\n\n您可以直接問我：\n• 「大安三房還有嗎？」\n• 「想看 3000 萬以內的物件」\n• 「能約週六看屋嗎」\n\n如果需要 ${agentName} 親自回覆，我會立刻通知。`,
       ),
     ]);
+
+    if (richMenus.customerRichMenuId) {
+      const r = await linkRichMenuToUser(
+        accessToken,
+        lineUserId,
+        richMenus.customerRichMenuId,
+      );
+      if (!r.ok) {
+        console.warn(
+          "[LINE webhook] customer richmenu link failed:",
+          r.status,
+          r.body ?? "",
+        );
+      }
+    }
     return;
   }
 
@@ -219,6 +253,21 @@ async function onFollow(
     ),
   ];
   await replyMessage(accessToken, event.replyToken, messages);
+
+  if (richMenus.agentRichMenuId) {
+    const r = await linkRichMenuToUser(
+      accessToken,
+      lineUserId,
+      richMenus.agentRichMenuId,
+    );
+    if (!r.ok) {
+      console.warn(
+        "[LINE webhook] agent richmenu link failed:",
+        r.status,
+        r.body ?? "",
+      );
+    }
+  }
 }
 
 async function onUnfollow(event: LineUnfollowEvent) {

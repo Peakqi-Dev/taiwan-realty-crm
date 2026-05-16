@@ -10,5 +10,10 @@ export function lineEnv() {
     liffUrl: process.env.LINE_LIFF_URL || null,
     // LIFF ID used by the /line/connect page to init the LIFF SDK.
     liffId: process.env.NEXT_PUBLIC_LIFF_ID || null,
+    // Pre-registered Rich Menu IDs (from POST /v2/bot/richmenu). Set after
+    // running scripts/setup-rich-menus.mjs. Webhook links the matching menu
+    // to each user after follow.
+    agentRichMenuId: process.env.LINE_RICH_MENU_AGENT_ID || null,
+    customerRichMenuId: process.env.LINE_RICH_MENU_CUSTOMER_ID || null,
   };
 }

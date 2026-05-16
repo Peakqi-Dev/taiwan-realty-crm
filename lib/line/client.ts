@@ -126,6 +126,25 @@ export async function pushMessage(
   return { ok: true, status: res.status };
 }
 
+/**
+ * Bind a specific Rich Menu to one user (POST /v2/bot/user/{userId}/richmenu/{richMenuId}).
+ * Used to show different menus to agents vs customers on the shared bot.
+ */
+export async function linkRichMenuToUser(
+  accessToken: string,
+  userId: string,
+  richMenuId: string,
+): Promise<{ ok: boolean; status: number; body?: string }> {
+  const res = await fetch(`${LINE_API}/user/${userId}/richmenu/${richMenuId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    return { ok: false, status: res.status, body: await res.text() };
+  }
+  return { ok: true, status: res.status };
+}
+
 export function textMessage(
   text: string,
   quickReplies?: LineQuickReplyAction[],
