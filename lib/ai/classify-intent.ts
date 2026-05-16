@@ -449,7 +449,7 @@ export async function classifyIntentAndExtract(
     ],
     temperature: 0.1,
     maxTokens: 900,
-    timeoutMs: 9000,
+    timeoutMs: 15000,
   });
 
   const raw = extractJson<{ intent?: unknown; data?: unknown }>(completion);

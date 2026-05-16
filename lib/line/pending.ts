@@ -93,17 +93,24 @@ export async function setPropertyDraft(
   draft: import("@/lib/ai/classify-intent").PropertyDraft,
 ): Promise<void> {
   const admin = createAdminClient();
-  await admin
+  const del = await admin
     .from("line_pending_actions")
     .delete()
     .eq("line_user_id", lineUserId)
     .eq("kind", KIND_PROPERTY_DRAFT);
-  await admin.from("line_pending_actions").insert({
+  if (del.error) {
+    console.error("[setPropertyDraft] delete failed:", del.error.message);
+  }
+  const ins = await admin.from("line_pending_actions").insert({
     line_user_id: lineUserId,
     kind: KIND_PROPERTY_DRAFT,
     payload: draft,
     expires_at: new Date(Date.now() + TTL_MINUTES * 60_000).toISOString(),
   });
+  if (ins.error) {
+    console.error("[setPropertyDraft] insert failed:", ins.error.message);
+    throw new Error(`pending insert failed: ${ins.error.message}`);
+  }
 }
 
 export async function clearPropertyDraft(lineUserId: string): Promise<void> {
