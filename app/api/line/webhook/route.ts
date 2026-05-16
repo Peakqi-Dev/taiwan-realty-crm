@@ -31,6 +31,7 @@ import { saveFeedback } from "@/lib/line/feedback";
 import { tutorialText, TUTORIAL_QUICK_REPLIES } from "@/lib/line/tutorial";
 import { classifyIntent } from "@/lib/line/intent";
 import { parseSearchByRegex } from "@/lib/ai/parse-search";
+import { parsePropertyByRegex } from "@/lib/ai/parse-property";
 import {
   buildSearchLinks,
   formatCriteria,
@@ -402,12 +403,20 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
     return;
   }
 
-  // Regex fast-path: simple property searches skip AI entirely.
-  if (!pending) {
+  // Regex fast-paths — skip AI entirely when the text clearly fits.
+  if (!pending && !pendingProperty) {
     const searchCriteria = parseSearchByRegex(text);
     if (searchCriteria) {
       await replyMessage(accessToken, event.replyToken, [
         buildSearchReply(searchCriteria),
+      ]);
+      return;
+    }
+    const propertyDraft = parsePropertyByRegex(text);
+    if (propertyDraft) {
+      await setPropertyDraft(lineUserId, propertyDraft);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(formatPropertyDraftForConfirm(propertyDraft)),
       ]);
       return;
     }
