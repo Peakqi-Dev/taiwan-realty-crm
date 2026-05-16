@@ -448,7 +448,7 @@ export async function classifyIntentAndExtract(
       { role: "user", content: text },
     ],
     temperature: 0.1,
-    maxTokens: 500,
+    maxTokens: 900,
     timeoutMs: 9000,
   });
 
