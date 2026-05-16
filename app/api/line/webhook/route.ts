@@ -35,6 +35,14 @@ import { parsePropertyByRegex } from "@/lib/ai/parse-property";
 import { parseDraftReplyRequest } from "@/lib/ai/parse-draft-reply";
 import { buildDraftReply } from "@/lib/line/draft-reply";
 import {
+  consumePairing,
+  ensureCustomer,
+  findCustomer,
+  ensureConversation,
+  appendMessage,
+} from "@/lib/line/customer";
+import { generateCustomerReply } from "@/lib/line/customer-ai";
+import {
   buildSearchLinks,
   formatCriteria,
   type SearchCriteria,
@@ -156,6 +164,43 @@ async function onFollow(
   const profile = await getProfile(accessToken, lineUserId);
   const displayName = profile?.displayName || "LINE 用戶";
 
+  // Customer pairing flow: a pending row in customer_pairings means this
+  // LINE user came in via /r/<short_code> → LIFF, which captured their
+  // userId before they hit "Add friend". They are a customer, not an agent.
+  const pairing = await consumePairing(lineUserId);
+  if (pairing) {
+    try {
+      const customer = await ensureCustomer({
+        lineUserId,
+        displayName,
+        pictureUrl: profile?.pictureUrl ?? null,
+        agentUserId: pairing.agentUserId,
+      });
+      await ensureConversation({
+        agentUserId: pairing.agentUserId,
+        customerId: customer.id,
+      });
+    } catch (err) {
+      console.error("[LINE webhook] customer onboarding failed:", err);
+    }
+
+    const admin = createAdminClient();
+    const { data: agent } = await admin
+      .from("agent_profiles")
+      .select("display_name")
+      .eq("user_id", pairing.agentUserId)
+      .maybeSingle();
+    const agentName = (agent?.display_name as string) || "您的專屬業務";
+
+    await replyMessage(accessToken, event.replyToken, [
+      textMessage(
+        `👋 ${displayName} 您好，歡迎加入 ${agentName} 的 LINE 客服。\n\n我是 ${agentName} 的 AI 助手，24 小時為您服務 💬\n\n您可以直接問我：\n• 「大安三房還有嗎？」\n• 「想看 3000 萬以內的物件」\n• 「能約週六看屋嗎」\n\n如果需要 ${agentName} 親自回覆，我會立刻通知。`,
+      ),
+    ]);
+    return;
+  }
+
+  // Agent flow (existing): create / reactivate LeadFlow account.
   try {
     await autoOnboardLineUser(lineUserId, displayName);
   } catch (err) {
@@ -166,8 +211,6 @@ async function onFollow(
     return;
   }
 
-  // Single-message welcome: text + plain URL (LINE auto-renders preview).
-  // Skips the buttonsTemplate to keep the welcome at 1 outbound message.
   const liffLine = liffUrl ? `\n\n想看完整資料 → ${liffUrl}` : "";
   const messages: LineMessage[] = [
     textMessage(
@@ -193,6 +236,20 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
   const lineUserId = event.source.userId;
   if (!lineUserId) return;
   const text = (event.message as { type: "text"; text: string }).text;
+
+  // Customer route: takes precedence over agent route. A LINE user identified
+  // as a customer never gets auto-onboarded as an agent.
+  const customer = await findCustomer(lineUserId);
+  if (customer) {
+    await handleCustomerMessage({
+      accessToken,
+      replyToken: event.replyToken,
+      lineUserId,
+      customer,
+      text,
+    });
+    return;
+  }
 
   const admin = createAdminClient();
   const { data: binding } = await admin
@@ -639,6 +696,68 @@ async function computeIntentMessages(
   }
 
   return [unknownReply()];
+}
+
+interface HandleCustomerOpts {
+  accessToken: string;
+  replyToken: string;
+  lineUserId: string;
+  customer: { id: string; agentUserId: string; displayName: string };
+  text: string;
+}
+
+/**
+ * Customer-side message handler: looks up (or creates) the conversation,
+ * generates an AI reply scoped to the customer's agent, logs both turns,
+ * and replies. No agent-side intents (build client / record interaction
+ * etc.) apply on this path.
+ */
+async function handleCustomerMessage(opts: HandleCustomerOpts) {
+  const { accessToken, replyToken, lineUserId, customer, text } = opts;
+
+  const admin = createAdminClient();
+  const { data: agent } = await admin
+    .from("agent_profiles")
+    .select("display_name")
+    .eq("user_id", customer.agentUserId)
+    .maybeSingle();
+  const agentName = (agent?.display_name as string) || "您的業務";
+
+  const conversation = await ensureConversation({
+    agentUserId: customer.agentUserId,
+    customerId: customer.id,
+  });
+
+  // Log the inbound customer turn first so it's persisted even if the AI
+  // call or LINE reply later fails.
+  try {
+    await appendMessage({
+      conversationId: conversation.id,
+      senderType: "customer",
+      text,
+    });
+  } catch (err) {
+    console.error("[LINE webhook] customer message log failed:", err);
+  }
+
+  await runWithAck(accessToken, replyToken, lineUserId, async () => {
+    const reply = await generateCustomerReply({
+      agentUserId: customer.agentUserId,
+      agentName,
+      customerText: text,
+    });
+    // Log the outbound AI turn too.
+    try {
+      await appendMessage({
+        conversationId: conversation.id,
+        senderType: "ai",
+        text: reply.text,
+      });
+    } catch (err) {
+      console.error("[LINE webhook] AI message log failed:", err);
+    }
+    return [textMessage(reply.text)];
+  });
 }
 
 function unknownReply(): LineMessage {

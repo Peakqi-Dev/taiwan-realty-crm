@@ -15,7 +15,30 @@ type Phase =
   | { kind: "loading"; message?: string }
   | { kind: "no_liff_id" }
   | { kind: "liff_error"; message: string }
-  | { kind: "no_binding" };
+  | { kind: "no_binding" }
+  | { kind: "pair_done"; agentName: string; addFriendUrl: string };
+
+/**
+ * LIFF endpoint serves two flows, distinguished by the `pair` query param:
+ *   - `?pair=<short_code>` → customer flow: capture LINE userId + write
+ *     a pending pairing row, then bounce to the bot's add-friend URL.
+ *   - no `pair` param      → agent flow: auto-login the agent into LeadFlow.
+ *
+ * `liff.state` is also consulted because LIFF URLs constructed as
+ * `liff.line.me/<id>?x=y` get re-encoded with `liff.state=x%3Dy` inside the
+ * LINE webview. Both forms map to the same `pair=<code>` we need.
+ */
+function getPairCodeFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const direct = new URLSearchParams(window.location.search).get("pair");
+  if (direct) return direct;
+  const stateRaw = new URLSearchParams(window.location.search).get("liff.state");
+  if (stateRaw) {
+    const decoded = stateRaw.startsWith("?") ? stateRaw.slice(1) : stateRaw;
+    return new URLSearchParams(decoded).get("pair");
+  }
+  return null;
+}
 
 export default function LineConnectPage() {
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
@@ -37,6 +60,31 @@ export default function LineConnectPage() {
       }
       const profile = await window.liff.getProfile();
 
+      // Customer pairing flow (came from /r/<short_code>).
+      const pairCode = getPairCodeFromUrl();
+      if (pairCode) {
+        setPhase({ kind: "loading", message: "正在連結業務..." });
+        const res = await fetch("/api/line/pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: pairCode,
+            customerLineUserId: profile.userId,
+          }),
+        });
+        const data = await res.json();
+        if (!data?.ok) {
+          throw new Error(data?.error || "pair failed");
+        }
+        setPhase({
+          kind: "pair_done",
+          agentName: data.agentName,
+          addFriendUrl: data.addFriendUrl,
+        });
+        return;
+      }
+
+      // Agent auto-login flow (existing).
       setPhase({ kind: "loading", message: "正在登入 LeadFlow..." });
       const res = await fetch("/api/line/auto-login", {
         method: "POST",
@@ -108,6 +156,13 @@ export default function LineConnectPage() {
           )}
 
           {phase.kind === "no_binding" && <NoBindingBlock />}
+
+          {phase.kind === "pair_done" && (
+            <PairDoneBlock
+              agentName={phase.agentName}
+              addFriendUrl={phase.addFriendUrl}
+            />
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-600">
@@ -123,6 +178,37 @@ function NoticeCard({ title, body }: { title: string; body: string }) {
     <div className="space-y-2">
       <h1 className="text-base font-semibold">{title}</h1>
       <p className="text-sm leading-relaxed text-slate-400">{body}</p>
+    </div>
+  );
+}
+
+function PairDoneBlock({
+  agentName,
+  addFriendUrl,
+}: {
+  agentName: string;
+  addFriendUrl: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold">準備好了</h1>
+      <p className="text-sm leading-relaxed text-slate-400">
+        已幫您連結到業務 <span className="font-semibold text-white">{agentName}</span>。
+        <br />
+        最後一步：加 LeadFlow 為 LINE 好友，{agentName} 的 AI 客服就會立刻為您服務。
+      </p>
+      {addFriendUrl ? (
+        <a
+          href={addFriendUrl}
+          className="inline-flex w-full items-center justify-center rounded-md bg-[#06C755] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+        >
+          加 LINE 好友
+        </a>
+      ) : (
+        <p className="text-xs text-amber-300">
+          管理員尚未設定加好友連結，請聯絡客服。
+        </p>
+      )}
     </div>
   );
 }
