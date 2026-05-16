@@ -8,6 +8,9 @@
 // Commands:
 //   create-agent <image-path>     register agent menu + upload image
 //   create-customer <image-path>  register customer menu + upload image
+//   create-from-prod <role>       fetch placeholder PNG from
+//                                 https://taiwan-realty-crm.vercel.app/api/richmenu/<role>
+//                                 and register it (role = agent | customer)
 //   list                          show all registered Rich Menus
 //   delete <richMenuId>           remove a menu by id
 //
@@ -139,6 +142,34 @@ try {
     await uploadImage(id, arg);
     console.log(`✅ Customer rich menu ready. id=${id}`);
     console.log(`Set LINE_RICH_MENU_CUSTOMER_ID=${id} in Vercel env.`);
+  } else if (cmd === 'create-from-prod') {
+    const role = arg;
+    if (role !== 'agent' && role !== 'customer') {
+      throw new Error('usage: create-from-prod agent|customer');
+    }
+    const menu = role === 'agent' ? AGENT_MENU : CUSTOMER_MENU;
+    const origin = process.env.APP_ORIGIN || 'https://taiwan-realty-crm.vercel.app';
+    const imgRes = await fetch(`${origin}/api/richmenu/${role}`);
+    if (!imgRes.ok) {
+      throw new Error(`fetch placeholder PNG failed: ${imgRes.status}`);
+    }
+    const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+    const id = await createRichMenu(menu);
+    // uploadImage takes a path; inline the equivalent fetch with buffer.
+    const up = await fetch(`${DATA_API}/richmenu/${id}/content`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/png',
+        Authorization: `Bearer ${TOKEN}`,
+      },
+      body: imgBuf,
+    });
+    if (!up.ok) throw new Error(`upload ${up.status}: ${await up.text()}`);
+    console.log(`✅ ${role} rich menu ready. id=${id}`);
+    const envKey = role === 'agent'
+      ? 'LINE_RICH_MENU_AGENT_ID'
+      : 'LINE_RICH_MENU_CUSTOMER_ID';
+    console.log(`Set ${envKey}=${id} in Vercel env, then redeploy.`);
   } else if (cmd === 'list') {
     const menus = await listMenus();
     for (const m of menus) {
