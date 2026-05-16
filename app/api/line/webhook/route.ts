@@ -32,6 +32,8 @@ import { tutorialText, TUTORIAL_QUICK_REPLIES } from "@/lib/line/tutorial";
 import { classifyIntent } from "@/lib/line/intent";
 import { parseSearchByRegex } from "@/lib/ai/parse-search";
 import { parsePropertyByRegex } from "@/lib/ai/parse-property";
+import { parseDraftReplyRequest } from "@/lib/ai/parse-draft-reply";
+import { buildDraftReply } from "@/lib/line/draft-reply";
 import {
   buildSearchLinks,
   formatCriteria,
@@ -418,6 +420,14 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
       await replyMessage(accessToken, event.replyToken, [
         textMessage(formatPropertyDraftForConfirm(propertyDraft)),
       ]);
+      return;
+    }
+    const draftReplyReq = parseDraftReplyRequest(text);
+    if (draftReplyReq) {
+      await runWithAck(accessToken, event.replyToken, lineUserId, async () => {
+        const reply = await buildDraftReply(ownerUserId, draftReplyReq);
+        return [textMessage(reply)];
+      });
       return;
     }
   }
