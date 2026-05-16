@@ -222,7 +222,7 @@ export function PropertyForm({ initial, mode }: PropertyFormProps) {
           />
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label htmlFor="commissionDeadline">委託到期日 *</Label>
           <Input
             id="commissionDeadline"
@@ -230,6 +230,7 @@ export function PropertyForm({ initial, mode }: PropertyFormProps) {
             type="date"
             required
             defaultValue={defaultDeadline}
+            className="min-w-0 max-w-full appearance-none"
           />
         </div>
 
