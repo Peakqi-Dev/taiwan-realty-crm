@@ -94,7 +94,7 @@ export default function RemindersPage() {
             className="grid grid-cols-1 gap-3 md:grid-cols-[160px_1fr_180px_auto]"
           >
             <input type="hidden" name="type" value={type} />
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label>類型</Label>
               <Select
                 value={type}
@@ -112,7 +112,7 @@ export default function RemindersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label htmlFor="title">提醒內容</Label>
               <Input
                 id="title"
@@ -121,7 +121,7 @@ export default function RemindersPage() {
                 placeholder="例:聯繫王俊傑確認週末帶看時段"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label htmlFor="remindAt">提醒日期</Label>
               <Input
                 id="remindAt"
@@ -129,6 +129,7 @@ export default function RemindersPage() {
                 type="date"
                 required
                 defaultValue={new Date().toISOString().slice(0, 10)}
+                className="min-w-0 max-w-full appearance-none"
               />
             </div>
             <div className="flex items-end">
