@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import Script from "next/script";
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
@@ -108,22 +107,7 @@ export default function LineConnectPage() {
             />
           )}
 
-          {phase.kind === "no_binding" && (
-            <div className="space-y-3">
-              <h1 className="text-xl font-semibold">請先加好友</h1>
-              <p className="text-sm leading-relaxed text-slate-400">
-                你還沒加 LeadFlow Bot 為好友，沒辦法自動幫你登入。
-                <br />
-                打開 LINE 搜尋 LeadFlow 或從 /beta 頁面掃 QR 加好友，加完後再回來這頁就會直接進入助手。
-              </p>
-              <Link
-                href="/beta"
-                className="inline-flex w-full items-center justify-center rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
-              >
-                打開 /beta 看 QR Code
-              </Link>
-            </div>
-          )}
+          {phase.kind === "no_binding" && <NoBindingBlock />}
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-600">
@@ -139,6 +123,36 @@ function NoticeCard({ title, body }: { title: string; body: string }) {
     <div className="space-y-2">
       <h1 className="text-base font-semibold">{title}</h1>
       <p className="text-sm leading-relaxed text-slate-400">{body}</p>
+    </div>
+  );
+}
+
+function NoBindingBlock() {
+  const addFriendUrl =
+    process.env.NEXT_PUBLIC_LINE_ADD_FRIEND_URL ||
+    (process.env.NEXT_PUBLIC_LIFF_ID
+      ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}`
+      : "");
+  return (
+    <div className="space-y-3">
+      <h1 className="text-xl font-semibold">請先加好友</h1>
+      <p className="text-sm leading-relaxed text-slate-400">
+        你還沒加 LeadFlow Bot 為好友，沒辦法自動幫你登入。
+        <br />
+        點下面按鈕直接加 Bot 為好友，加完之後跟 Bot 講一句話就能用助手。
+      </p>
+      {addFriendUrl ? (
+        <a
+          href={addFriendUrl}
+          className="inline-flex w-full items-center justify-center rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+        >
+          加 LeadFlow 為好友
+        </a>
+      ) : (
+        <p className="text-xs text-amber-300">
+          管理員尚未設定 NEXT_PUBLIC_LINE_ADD_FRIEND_URL，請聯絡客服。
+        </p>
+      )}
     </div>
   );
 }

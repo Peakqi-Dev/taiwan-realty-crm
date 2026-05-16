@@ -5,10 +5,15 @@ import { useFormState, useFormStatus } from "react-dom";
 import { CheckCircle2, Sparkles } from "lucide-react";
 import { applyForBetaAction, type BetaActionState } from "./actions";
 
-const liffUrl =
-  process.env.NEXT_PUBLIC_LIFF_ID
+// Prefer the explicit Bot add-friend URL (set in Vercel env once Jacky
+// pastes it from LINE Official Account Manager → 加好友工具). Falls back
+// to the LIFF URL — same behaviour as before — so the page still works
+// on day one without the env.
+const addFriendUrl =
+  process.env.NEXT_PUBLIC_LINE_ADD_FRIEND_URL ||
+  (process.env.NEXT_PUBLIC_LIFF_ID
     ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}`
-    : "https://taiwan-realty-crm.vercel.app/line/connect";
+    : "https://taiwan-realty-crm.vercel.app/line/connect");
 
 function qrUrl(target: string, size = 280): string {
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=12&data=${encodeURIComponent(target)}`;
@@ -54,7 +59,7 @@ export default function BetaPage() {
         <div className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 text-center backdrop-blur">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={qrUrl(liffUrl, 280)}
+            src={qrUrl(addFriendUrl, 280)}
             alt="加入 LeadFlow LINE Bot"
             width={280}
             height={280}
@@ -67,7 +72,7 @@ export default function BetaPage() {
             加好友後就能立刻講「王先生 3000 萬 信義區 三房」開始建檔
           </p>
           <a
-            href={liffUrl}
+            href={addFriendUrl}
             className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-white/10 hover:bg-slate-100"
           >
             手機點這直接打開 LINE
