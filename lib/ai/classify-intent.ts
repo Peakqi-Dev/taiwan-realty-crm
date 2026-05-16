@@ -356,15 +356,33 @@ function sanitizePropertyDraft(raw: Record<string, unknown>): PropertyDraft {
   // is that big in 萬元 units.
   let priceRaw = intNum(raw.price);
   if (priceRaw !== null && priceRaw > 100000) priceRaw = Math.round(priceRaw / 10000);
+
+  // Models sometimes ignore type+status enum: when `type` looks like 三房 /
+  // 兩房 (i.e. room layout), it isn't 買賣/租賃 — treat that as the title
+  // hint and clear the type field. Same for status fallback.
+  const looksLikeRoomLayout = typeRaw && /[一二三四五六1-9]房/.test(typeRaw);
+  const cleanType =
+    typeRaw && !looksLikeRoomLayout && ALLOWED_PROPERTY_TYPES.has(typeRaw)
+      ? (typeRaw as PropertyDraft["type"])
+      : null;
+
+  // Some responses use "location" instead of "district".
+  const districtRaw =
+    str(raw.district) ??
+    str((raw as Record<string, unknown>).location) ??
+    null;
+  // Some responses use "name" instead of "title".
+  const titleRaw =
+    str(raw.title) ??
+    str((raw as Record<string, unknown>).name) ??
+    str((raw as Record<string, unknown>).location);
+
   return {
-    title: str(raw.title),
+    title: titleRaw,
     address: str(raw.address),
-    district: str(raw.district),
+    district: districtRaw,
     price: priceRaw,
-    type:
-      typeRaw && ALLOWED_PROPERTY_TYPES.has(typeRaw)
-        ? (typeRaw as PropertyDraft["type"])
-        : null,
+    type: cleanType,
     status:
       statusRaw && ALLOWED_PROPERTY_STATUSES.has(statusRaw)
         ? (statusRaw as PropertyDraft["status"])
@@ -461,7 +479,11 @@ export async function classifyIntentAndExtract(
       return { intent: "edit_client", data: sanitized };
     }
     case "create_property": {
-      const sanitized = sanitizePropertyDraft(data);
+      // Model sometimes returns the property fields under "property" instead
+      // of "data" — peek both before sanitising.
+      const propData =
+        (raw as { property?: Record<string, unknown> }).property ?? data;
+      const sanitized = sanitizePropertyDraft(propData);
       if (!sanitized.title) {
         return { intent: "unknown", data: { reason: "missing property title" } };
       }
