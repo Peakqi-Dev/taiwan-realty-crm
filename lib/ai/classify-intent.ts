@@ -351,11 +351,16 @@ function sanitizePropertyDraft(raw: Record<string, unknown>): PropertyDraft {
   };
   const typeRaw = str(raw.type);
   const statusRaw = str(raw.status);
+  // Defensive: if the model returned raw NTD (e.g. 42_800_000 for 4280萬)
+  // instead of 萬元, convert. Threshold = 100k 萬 = 10 億; nothing legitimate
+  // is that big in 萬元 units.
+  let priceRaw = intNum(raw.price);
+  if (priceRaw !== null && priceRaw > 100000) priceRaw = Math.round(priceRaw / 10000);
   return {
     title: str(raw.title),
     address: str(raw.address),
     district: str(raw.district),
-    price: intNum(raw.price),
+    price: priceRaw,
     type:
       typeRaw && ALLOWED_PROPERTY_TYPES.has(typeRaw)
         ? (typeRaw as PropertyDraft["type"])
