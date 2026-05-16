@@ -34,11 +34,20 @@ export interface EditClientDraft {
   };
 }
 
+export interface SearchPropertyDraft {
+  districts: string[];
+  budget_min: number | null;
+  budget_max: number | null;
+  rooms: number | null;
+  notes: string;
+}
+
 export type IntentResult =
   | { intent: "client"; data: ClientDraft }
   | { intent: "reminder"; data: ReminderDraft }
   | { intent: "interaction"; data: InteractionDraft }
   | { intent: "edit_client"; data: EditClientDraft }
+  | { intent: "search_property"; data: SearchPropertyDraft }
   | { intent: "today_tasks"; data: Record<string, never> }
   | { intent: "unknown"; data: { reason: string } };
 
@@ -71,6 +80,7 @@ function systemPrompt(today: string): string {
 - "edit_client": 修改既有客戶資料（例「改王先生預算 3500」「林小姐改成議價中」「王俊豪偏好區域加大安」）
 - "reminder": 要建立提醒（含時間 + 動作，例「提醒我下週三聯絡王先生」）
 - "interaction": 記錄已發生的互動（已知客戶 + 動作 + 反饋，例「今天帶林小姐看大安的房，她覺得太貴」）
+- "search_property": 替客戶找物件（沒有客戶姓名，只有需求條件，例「幫我找信義區 3000 萬以內三房」「客人要大安兩房 2000 萬以內，要捷運站附近」）
 - "today_tasks": 詢問今日待辦（例「今天有什麼事」、「今日任務」、「今天該做什麼」）
 - "unknown": 無法歸類或資訊不足
 
@@ -138,6 +148,18 @@ intent="edit_client":
   }
 }
 （patch 內未提及的欄位一律 null，不要硬填。）
+
+intent="search_property":
+{
+  "intent": "search_property",
+  "data": {
+    "districts": string[],
+    "budget_min": number | null,
+    "budget_max": number | null,
+    "rooms": number | null,
+    "notes": string
+  }
+}
 
 intent="today_tasks":
 { "intent": "today_tasks", "data": {} }
@@ -265,6 +287,29 @@ function sanitizeEditClient(raw: Record<string, unknown>): EditClientDraft | nul
   return { client_name_hint: hint, patch };
 }
 
+function sanitizeSearchProperty(raw: Record<string, unknown>): SearchPropertyDraft {
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  };
+  const districts = Array.isArray(raw.districts)
+    ? raw.districts
+        .map((d) => (typeof d === "string" ? d.trim() : ""))
+        .filter((d): d is string => d.length > 0)
+    : [];
+  let min = num(raw.budget_min);
+  let max = num(raw.budget_max);
+  if (min !== null && max !== null && min > max) [min, max] = [max, min];
+  return {
+    districts,
+    budget_min: min,
+    budget_max: max,
+    rooms: num(raw.rooms),
+    notes: typeof raw.notes === "string" ? raw.notes.trim() : "",
+  };
+}
+
 function sanitizeInteraction(
   raw: Record<string, unknown>,
 ): InteractionDraft | null {
@@ -325,6 +370,9 @@ export async function classifyIntentAndExtract(
       const sanitized = sanitizeEditClient(data);
       if (!sanitized) return { intent: "unknown", data: { reason: "empty patch" } };
       return { intent: "edit_client", data: sanitized };
+    }
+    case "search_property": {
+      return { intent: "search_property", data: sanitizeSearchProperty(data) };
     }
     case "today_tasks":
       return { intent: "today_tasks", data: {} };

@@ -27,6 +27,12 @@ import {
 import { saveFeedback } from "@/lib/line/feedback";
 import { tutorialText, TUTORIAL_QUICK_REPLIES } from "@/lib/line/tutorial";
 import { classifyIntent } from "@/lib/line/intent";
+import { parseSearchByRegex } from "@/lib/ai/parse-search";
+import {
+  buildSearchLinks,
+  formatCriteria,
+  type SearchCriteria,
+} from "@/lib/line/property-search";
 import { commitClientDraft } from "@/lib/line/commit-client";
 import { commitReminder } from "@/lib/line/commit-reminder";
 import {
@@ -338,10 +344,34 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
     return;
   }
 
-  // AI classifier path — heavy. Ack first, push the result.
+  // Regex fast-path: simple property searches skip AI entirely.
+  if (!pending) {
+    const searchCriteria = parseSearchByRegex(text);
+    if (searchCriteria) {
+      await replyMessage(accessToken, event.replyToken, [
+        buildSearchReply(searchCriteria),
+      ]);
+      return;
+    }
+  }
+
+  // AI classifier path — heavy. Loading indicator + reply.
   await runWithAck(accessToken, event.replyToken, lineUserId, async () =>
     computeIntentMessages(text, lineUserId, ownerUserId),
   );
+}
+
+function buildSearchReply(criteria: SearchCriteria): LineMessage {
+  const links = buildSearchLinks(criteria);
+  const lines: string[] = [`🔍 搜尋：${formatCriteria(criteria)}`, ""];
+  if (links.length > 0) {
+    for (const link of links) lines.push(`👉 ${link.label}：${link.url}`);
+    lines.push("");
+    lines.push("找到適合的物件可以跟我說，我幫你記到客戶檔案裡。");
+  } else {
+    lines.push("這組條件目前還沒辦法產出搜尋連結，要不要再說一次區域或預算？");
+  }
+  return textMessage(lines.join("\n"));
 }
 
 /**
@@ -411,6 +441,18 @@ async function computeIntentMessages(
   if (result.intent === "today_tasks") {
     const brief = await buildDailyBrief(ownerUserId);
     return [textMessage(brief.text)];
+  }
+
+  if (result.intent === "search_property") {
+    return [
+      buildSearchReply({
+        districts: result.data.districts,
+        budgetMin: result.data.budget_min,
+        budgetMax: result.data.budget_max,
+        rooms: result.data.rooms,
+        notes: result.data.notes,
+      }),
+    ];
   }
 
   if (result.intent === "reminder") {
