@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
   // Fetch the latest message text for each row in one batched query.
   const conversationIds = (rows ?? []).map((r) => r.id as string);
-  let lastMessages: Record<string, { sender_type: string; text: string }> = {};
+  const lastMessages: Record<string, { sender_type: string; text: string }> = {};
   if (conversationIds.length > 0) {
     const { data: msgs } = await admin
       .from("messages")
