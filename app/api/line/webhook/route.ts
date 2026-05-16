@@ -20,6 +20,9 @@ import {
   getActiveDraft,
   setDraft,
   clearDraft,
+  getActivePropertyDraft,
+  setPropertyDraft,
+  clearPropertyDraft,
   setAwaitingFeedback,
   isAwaitingFeedback,
   clearAwaitingFeedback,
@@ -34,6 +37,11 @@ import {
   type SearchCriteria,
 } from "@/lib/line/property-search";
 import { commitClientDraft } from "@/lib/line/commit-client";
+import {
+  commitPropertyDraft,
+  formatPropertyDraftForConfirm,
+  patchPropertyDraft,
+} from "@/lib/line/commit-property";
 import { commitReminder } from "@/lib/line/commit-reminder";
 import {
   matchClientsByHint,
@@ -277,7 +285,57 @@ async function onMessage(event: LineMessageEvent, accessToken: string) {
   }
 
   const pending = await getActiveDraft(lineUserId);
+  const pendingProperty = await getActivePropertyDraft(lineUserId);
   const intent = classifyIntent(text);
+
+  // Property-draft confirm flow — mirror of client_draft path below.
+  if (pendingProperty) {
+    if (intent.kind === "confirm") {
+      const result = await commitPropertyDraft(ownerUserId, pendingProperty);
+      if (!result.ok) {
+        await replyMessage(accessToken, event.replyToken, [
+          textMessage(`建檔失敗：${result.error}`),
+        ]);
+        return;
+      }
+      await clearPropertyDraft(lineUserId);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage(
+          `✅ 已建檔物件「${pendingProperty.title}」。\n打開 LeadFlow 看詳細：https://taiwan-realty-crm.vercel.app/properties/${result.propertyId}`,
+        ),
+      ]);
+      return;
+    }
+    if (intent.kind === "cancel") {
+      await clearPropertyDraft(lineUserId);
+      await replyMessage(accessToken, event.replyToken, [
+        textMessage("已取消這筆物件建檔。"),
+      ]);
+      return;
+    }
+    if (intent.kind === "patch") {
+      await runWithAck(
+        accessToken,
+        event.replyToken,
+        lineUserId,
+        async () => {
+          // Re-classify the patch as a property and merge non-null fields.
+          const result = await classifyIntentAndExtract(
+            `新物件 ${intent.instruction}`,
+          );
+          const patchDraft =
+            result?.intent === "create_property"
+              ? result.data
+              : pendingProperty;
+          const merged = patchPropertyDraft(pendingProperty, patchDraft);
+          await setPropertyDraft(lineUserId, merged);
+          return [textMessage(formatPropertyDraftForConfirm(merged))];
+        },
+      );
+      return;
+    }
+    // freeform with pending property → classifier below decides.
+  }
 
   // Fast path: "today" queries skip AI to stay under LINE's 10s webhook
   // budget. Doesn't disturb a pending draft.
@@ -441,6 +499,11 @@ async function computeIntentMessages(
   if (result.intent === "today_tasks") {
     const brief = await buildDailyBrief(ownerUserId);
     return [textMessage(brief.text)];
+  }
+
+  if (result.intent === "create_property") {
+    await setPropertyDraft(lineUserId, result.data);
+    return [textMessage(formatPropertyDraftForConfirm(result.data))];
   }
 
   if (result.intent === "search_property") {

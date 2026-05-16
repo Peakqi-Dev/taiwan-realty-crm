@@ -34,6 +34,25 @@ export interface EditClientDraft {
   };
 }
 
+export interface PropertyDraft {
+  title: string | null;
+  address: string | null;
+  district: string | null;
+  price: number | null; // 萬元
+  type: "買賣" | "租賃" | null;
+  status:
+    | "委託中"
+    | "帶看中"
+    | "議價中"
+    | "成交"
+    | "解除委託"
+    | null;
+  rooms: number | null;
+  bathrooms: number | null;
+  area: number | null; // 坪
+  description: string;
+}
+
 export interface SearchPropertyDraft {
   districts: string[];
   budget_min: number | null;
@@ -47,6 +66,7 @@ export type IntentResult =
   | { intent: "reminder"; data: ReminderDraft }
   | { intent: "interaction"; data: InteractionDraft }
   | { intent: "edit_client"; data: EditClientDraft }
+  | { intent: "create_property"; data: PropertyDraft }
   | { intent: "search_property"; data: SearchPropertyDraft }
   | { intent: "today_tasks"; data: Record<string, never> }
   | { intent: "unknown"; data: { reason: string } };
@@ -80,6 +100,7 @@ function systemPrompt(today: string): string {
 - "edit_client": 修改既有客戶資料（例「改王先生預算 3500」「林小姐改成議價中」「王俊豪偏好區域加大安」）
 - "reminder": 要建立提醒（含時間 + 動作，例「提醒我下週三聯絡王先生」）
 - "interaction": 記錄已發生的互動（已知客戶 + 動作 + 反饋，例「今天帶林小姐看大安的房，她覺得太貴」）
+- "create_property": 建立新物件（房仲自己接到的委託，例「新物件 大安森林公園旁 三房 4280 萬」「委託 信義計畫區豪邸 5980 萬 議價中」）
 - "search_property": 替客戶找物件（沒有客戶姓名，只有需求條件，例「幫我找信義區 3000 萬以內三房」「客人要大安兩房 2000 萬以內，要捷運站附近」）
 - "today_tasks": 詢問今日待辦（例「今天有什麼事」、「今日任務」、「今天該做什麼」）
 - "unknown": 無法歸類或資訊不足
@@ -148,6 +169,23 @@ intent="edit_client":
   }
 }
 （patch 內未提及的欄位一律 null，不要硬填。）
+
+intent="create_property":
+{
+  "intent": "create_property",
+  "data": {
+    "title": string | null,              // 物件名稱，例「大安森林公園旁三房」
+    "address": string | null,            // 完整地址，沒提就 null
+    "district": string | null,           // 行政區
+    "price": number | null,              // 萬元
+    "type": "買賣" | "租賃" | null,
+    "status": "委託中" | "帶看中" | "議價中" | "成交" | "解除委託" | null,
+    "rooms": number | null,
+    "bathrooms": number | null,
+    "area": number | null,               // 坪數
+    "description": string                // 其他說明，沒有就空字串
+  }
+}
 
 intent="search_property":
 {
@@ -287,6 +325,52 @@ function sanitizeEditClient(raw: Record<string, unknown>): EditClientDraft | nul
   return { client_name_hint: hint, patch };
 }
 
+const ALLOWED_PROPERTY_TYPES = new Set(["買賣", "租賃"]);
+const ALLOWED_PROPERTY_STATUSES = new Set([
+  "委託中",
+  "帶看中",
+  "議價中",
+  "成交",
+  "解除委託",
+]);
+
+function sanitizePropertyDraft(raw: Record<string, unknown>): PropertyDraft {
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+  };
+  const intNum = (v: unknown): number | null => {
+    const n = num(v);
+    return n === null ? null : Math.round(n);
+  };
+  const str = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    return s ? s : null;
+  };
+  const typeRaw = str(raw.type);
+  const statusRaw = str(raw.status);
+  return {
+    title: str(raw.title),
+    address: str(raw.address),
+    district: str(raw.district),
+    price: intNum(raw.price),
+    type:
+      typeRaw && ALLOWED_PROPERTY_TYPES.has(typeRaw)
+        ? (typeRaw as PropertyDraft["type"])
+        : null,
+    status:
+      statusRaw && ALLOWED_PROPERTY_STATUSES.has(statusRaw)
+        ? (statusRaw as PropertyDraft["status"])
+        : null,
+    rooms: intNum(raw.rooms),
+    bathrooms: intNum(raw.bathrooms),
+    area: num(raw.area),
+    description: typeof raw.description === "string" ? raw.description.trim() : "",
+  };
+}
+
 function sanitizeSearchProperty(raw: Record<string, unknown>): SearchPropertyDraft {
   const num = (v: unknown): number | null => {
     if (v === null || v === undefined || v === "") return null;
@@ -370,6 +454,13 @@ export async function classifyIntentAndExtract(
       const sanitized = sanitizeEditClient(data);
       if (!sanitized) return { intent: "unknown", data: { reason: "empty patch" } };
       return { intent: "edit_client", data: sanitized };
+    }
+    case "create_property": {
+      const sanitized = sanitizePropertyDraft(data);
+      if (!sanitized.title) {
+        return { intent: "unknown", data: { reason: "missing property title" } };
+      }
+      return { intent: "create_property", data: sanitized };
     }
     case "search_property": {
       return { intent: "search_property", data: sanitizeSearchProperty(data) };
